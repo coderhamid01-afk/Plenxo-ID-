@@ -1,0 +1,47 @@
+--- app/src/main/java/com/example/ui/ChatsListScreen.kt
++++ app/src/main/java/com/example/ui/ChatsListScreen.kt
+@@ -324,6 +324,7 @@
+         },
+         containerColor = Color(0xFFF9F9F9)
+     ) { paddingValues ->
+         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+             val pendingFriendRequests by viewModel.pendingFriendRequests.collectAsState()
++            val outgoingPendingRequests by viewModel.outgoingPendingRequests.collectAsState()
+             
+             Column(modifier = Modifier.fillMaxSize()) {
+                 if (pendingFriendRequests.isNotEmpty()) {
+@@ -359,6 +360,34 @@
+                         }
+                     }
+                 }
++                
++                if (outgoingPendingRequests.isNotEmpty()) {
++                    Column(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(horizontal = 16.dp, vertical = 8.dp)
++                            .background(Color.White, RoundedCornerShape(16.dp))
++                            .border(1.dp, Color.LightGray.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
++                            .padding(16.dp)
++                    ) {
++                        Text(
++                            text = "Pending Outgoing (${outgoingPendingRequests.size})",
++                            fontWeight = FontWeight.Bold,
++                            fontSize = 15.sp,
++                            color = primaryColor,
++                            modifier = Modifier.padding(bottom = 12.dp)
++                        )
++                        outgoingPendingRequests.forEach { request ->
++                            Row(
++                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
++                                verticalAlignment = Alignment.CenterVertically
++                            ) {
++                                Text("To: ${request.receiverUid}", modifier = Modifier.weight(1f), fontSize = 14.sp)
++                                Text("Pending", color = Color.Gray, fontSize = 12.sp)
++                            }
++                        }
++                    }
++                }
+ 
+                 Row(
+                     modifier = Modifier

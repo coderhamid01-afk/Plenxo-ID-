@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Plenxo</string>
+    <string name="settings_title">ایپ کی ترتیبات</string>
+    <string name="settings_appearance">ایپ کی ظاہری شکل</string>
+    <string name="settings_theme_mode">ایپ تھیم موڈ</string>
+    <string name="settings_language">ایپ کی زبان</string>
+    <string name="settings_select_theme_title">تھیم موڈ منتخب کریں</string>
+    <string name="settings_select_language_title">ایپ کی زبان منتخب کریں</string>
+    <string name="cancel">منسوخ کریں</string>
+    <string name="save">محفوظ کریں</string>
+    <string name="settings_notifications">اطلاعات</string>
+    <string name="settings_enable_notifications">اطلاعات فعال کریں</string>
+    <string name="settings_notification_ringtone">اطلاع کی رنگ ٹون</string>
+    <string name="settings_ringtone_sub">پیش نظارہ کے لیے کسی بھی رنگ ٹون پر ٹیپ کریں، پھر لاگو کرنے کے لیے محفوظ کریں پر کلک کریں۔</string>
+    <string name="settings_chat_wallpaper">چیٹ وال پیپر</string>
+    <string name="settings_static_wallpapers">جامد اور رنگین وال پیپر</string>
+    <string name="settings_classic_styles">کلاسیکی طرزیں</string>
+    <string name="settings_motion_wallpapers">متحرک وال پیپر</string>
+    <string name="settings_live_motion">براہ راست متحرک</string>
+    <string name="settings_system_animations">سستم اینیمیشنز</string>
+    <string name="settings_global_speed">عالمی اینیمیشن سپیڈ</string>
+    <string name="settings_system_feedback">سسٹم فیڈ بیک</string>
+    <string name="settings_haptic_feedback">ہیپٹک فیڈ بیک</string>
+    <string name="settings_local_only">مقامی ڈیوائس اسٹوریج موڈ</string>
+    <string name="settings_local_only_sub">فعال ہونے پر، آپ کے چیٹس اور میڈیا صرف اسی ڈیوائس پر محفوظ ہوتے ہیں اور کلاؤڈ سنکرونائزیشن سرورز کو مکمل طور پر بائی پاس کرتے ہیں۔</string>
+    <string name="settings_security_display">سیکیورٹی اور ڈسپلے</string>
+    <string name="settings_allow_screenshots">اسکرین شاٹس کی اجازت دیں</string>
+    <string name="settings_maintenance">بحالی</string>
+    <string name="settings_clear_cache">ایپ کیشے صاف کریں</string>
+    <string name="settings_cache_cleared_toast">کیشے کامیابی کے ساتھ صاف کر دیا گیا</string>
+    <string name="settings_report_bug">بگ رپورٹ کریں</string>
+    <string name="settings_report_bug_sub">گلیچز کی براہ راست ڈسکارڈ اور فائر بیس پر رپورٹ کریں</string>
+</resources>

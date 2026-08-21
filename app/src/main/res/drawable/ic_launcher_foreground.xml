@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Clean, abstract rounded shape -->
+    <path
+        android:pathData="M54,10 C80,10 98,30 98,54 C98,78 80,98 54,98 C28,98 10,78 10,54 C10,30 28,10 54,10 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="10"
+                android:startY="10"
+                android:endX="98"
+                android:endY="98"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#6A0DAD"/>
+                <item android:offset="1.0" android:color="#00FFFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Simplified geometric detail for "tech" feel -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,54 L54,40 L68,54 L54,68 Z"/>
+</vector>

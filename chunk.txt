@@ -1,0 +1,31 @@
+    private val firestore by lazy { FirebaseFirestore.getInstance() }
+    
+    // Add User / New Chat Modal State
+    val showAddUserSheet = MutableStateFlow(false)
+    val addUserQuery = MutableStateFlow("")
+    private val _addUserState = MutableStateFlow<AddUserState>(AddUserState.Idle)
+    val addUserState: StateFlow<AddUserState> = _addUserState.asStateFlow()
+
+    fun showAddUserModal() {
+        addUserQuery.value = ""
+        _addUserState.value = AddUserState.Idle
+        showAddUserSheet.value = false
+        navigateToScreen(PlenxoScreen.DISCOVERY)
+    }
+
+    fun dismissAddUserModal() {
+        showAddUserSheet.value = false
+        _addUserState.value = AddUserState.Idle
+        addUserQuery.value = ""
+    }
+
+    fun clearAddUserError() {
+        if (_addUserState.value is AddUserState.Error) {
+            _addUserState.value = AddUserState.Idle
+        }
+    }
+    
+    fun getChatRoomId(uid1: String, uid2: String): String {
+        if (uid1.isEmpty() || uid2.isEmpty()) return ""
+        return if (uid1 < uid2) {
+            uid1 + "_" + uid2

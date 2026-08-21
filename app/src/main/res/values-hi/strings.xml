@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Plenxo</string>
+    <string name="settings_title">ऐप सेटिंग्स</string>
+    <string name="settings_appearance">ऐप रूप-रंग</string>
+    <string name="settings_theme_mode">ऐप थीम मोड</string>
+    <string name="settings_language">ऐप भाषा</string>
+    <string name="settings_select_theme_title">थीम मोड चुनें</string>
+    <string name="settings_select_language_title">ऐप भाषा चुनें</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="save">सहेजें</string>
+    <string name="settings_notifications">सूचनाएं</string>
+    <string name="settings_enable_notifications">सूचनाएं सक्षम करें</string>
+    <string name="settings_notification_ringtone">सूचना रिंगटोन</string>
+    <string name="settings_ringtone_sub">पूर्वावलोकन के लिए किसी भी रिंगटोन पर टैप करें, फिर लागू करने के लिए सहेजें पर क्लिक करें।</string>
+    <string name="settings_chat_wallpaper">चैट वॉलपेपर</string>
+    <string name="settings_static_wallpapers">स्थिर और रंगीन वॉलपेपर</string>
+    <string name="settings_classic_styles">क्लासिक शैलियाँ</string>
+    <string name="settings_motion_wallpapers">मोशन बैकग्राउंड</string>
+    <string name="settings_live_motion">लाइव मोशन</string>
+    <string name="settings_system_animations">सिस्टम एनिमेशन</string>
+    <string name="settings_global_speed">वैश्विक एनिमेशन गति</string>
+    <string name="settings_system_feedback">सिस्टम फीडबैक</string>
+    <string name="settings_haptic_feedback">हैप्टिक फीडबैक</string>
+    <string name="settings_local_only">स्थानीय डिवाइस स्टोरेज मोड</string>
+    <string name="settings_local_only_sub">सक्रिय होने पर, आपके चैट और मीडिया केवल इसी डिवाइस पर सहेजे जाते हैं और क्लाउड सिंक्रनाइज़ेशन सर्वर को पूरी तरह से बायपास करते हैं।</string>
+    <string name="settings_security_display">सुरक्षा और डिस्प्ले</string>
+    <string name="settings_allow_screenshots">स्क्रीनशॉट की अनुमति दें</string>
+    <string name="settings_maintenance">रखरखाव</string>
+    <string name="settings_clear_cache">ऐप कैश साफ़ करें</string>
+    <string name="settings_cache_cleared_toast">कैश सफलतापूर्वक साफ़ किया गया</string>
+    <string name="settings_report_bug">बग की रिपोर्ट करें</string>
+    <string name="settings_report_bug_sub">सीधे डिस्कोर्ड और फायरबेस पर बग की रिपोर्ट करें</string>
+</resources>

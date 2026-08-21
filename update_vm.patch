@@ -1,0 +1,36 @@
+--- app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
++++ app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
+@@ -2498,6 +2498,16 @@
+                     profileRingId.value = user.profileRingId
+                     com.example.util.SessionManager.saveProfileRingId(getApplication(), user.profileRingId)
+                     totalAccumulatedSeconds.value = user.totalAccumulatedSeconds
++                    
++                    val current = currentUserProfile.value
++                    currentUserProfile.value = (current ?: UserProfile(id = uid, uid = uid)).copy(
++                        displayName = user.displayName,
++                        email = user.email,
++                        userCode = user.userCode,
++                        phoneNumber = user.phoneNumber,
++                        profileRingId = user.profileRingId,
++                        selectedRingId = user.selectedRingId,
++                        profilePicUrl = user.profilePicUrl
++                    )
+                     
+                     if (user.profilePicUrl.isNotEmpty()) {
+@@ -2536,6 +2546,16 @@
+                         profileRingId.value = user.profileRingId
+                         com.example.util.SessionManager.saveProfileRingId(getApplication(), user.profileRingId)
+                         totalAccumulatedSeconds.value = user.totalAccumulatedSeconds
++
++                        val current = currentUserProfile.value
++                        currentUserProfile.value = (current ?: UserProfile(id = uid, uid = uid)).copy(
++                            displayName = user.displayName,
++                            email = user.email,
++                            userCode = user.userCode,
++                            phoneNumber = user.phoneNumber,
++                            profileRingId = user.profileRingId,
++                            selectedRingId = user.selectedRingId,
++                            profilePicUrl = user.profilePicUrl
++                        )
+                     }
+                 } catch (e: Exception) {

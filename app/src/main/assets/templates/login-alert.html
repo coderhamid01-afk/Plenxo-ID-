@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Sign-In Activity - Plenxo</title>
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f7f9fc; margin: 0; padding: 0; }
+    .container { max-width: 500px; margin: 40px auto; background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .logo { text-align: center; margin-bottom: 30px; }
+    .logo img { max-width: 140px; height: auto; }
+    .content { color: #4a5568; font-size: 16px; line-height: 1.6; }
+    .content p { margin: 0 0 16px; }
+    .alert-box { background: #fff5f5; border-left: 4px solid #e53e3e; padding: 16px 20px; margin: 24px 0; border-radius: 4px; color: #c53030; font-size: 15px; }
+    .details-table { width: 100%; background: #f0f4f8; border-radius: 6px; padding: 20px; margin-bottom: 24px; box-sizing: border-box; }
+    .details-table th { text-align: left; padding-bottom: 8px; color: #2d3748; font-size: 14px; font-weight: 600; width: 30%; }
+    .details-table td { padding-bottom: 8px; color: #4a5568; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #a0aec0; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <img src="https://i.ibb.co/7tMsfkHt/file-000000003c1c71f5a61c7d07678568cb.png" alt="Plenxo Logo">
+    </div>
+    <div class="content">
+      <p>Dear User,</p>
+      <p>We are writing to notify you of a recent successful sign-in to your Plenxo account. This is a routine security notification to help you keep your account safe.</p>
+      
+      <div class="alert-box">
+        <strong>Security Notice:</strong> A new session was established on your account.
+      </div>
+
+      <table class="details-table">
+        <tr>
+          <th>Date & Time:</th>
+          <td>{{LOGIN_TIME}}</td>
+        </tr>
+        <tr>
+          <th>Device/Browser:</th>
+          <td>{{DEVICE_INFO}}</td>
+        </tr>
+      </table>
+
+      <p>If this activity was yours, no further action is required. However, if you do not recognize this sign-in, we strongly advise you to reset your password immediately to secure your account.</p>
+      <p>Best regards,<br><strong>The Plenxo Security Team</strong></p>
+    </div>
+    <div class="footer">
+      <p>This is an automated security alert.</p>
+      <p>&copy; 2026 Plenxo. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

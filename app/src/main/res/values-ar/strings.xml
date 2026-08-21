@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Plenxo</string>
+    <string name="settings_title">إعدادات التطبيق</string>
+    <string name="settings_appearance">مظهر التطبيق</string>
+    <string name="settings_theme_mode">وضع سمة التطبيق</string>
+    <string name="settings_language">لغة التطبيق</string>
+    <string name="settings_select_theme_title">اختر وضع السمة</string>
+    <string name="settings_select_language_title">اختر لغة التطبيق</string>
+    <string name="cancel">إلغاء</string>
+    <string name="save">حفظ</string>
+    <string name="settings_notifications">الإشعارات</string>
+    <string name="settings_enable_notifications">تفعيل الإشعارات</string>
+    <string name="settings_notification_ringtone">نغمة الرنين للإشعارات</string>
+    <string name="settings_ringtone_sub">اضغط على أي نغمة رنين لمعاينتها، ثم اضغط على حفظ لتطبيقها.</string>
+    <string name="settings_chat_wallpaper">خلفية الدردشة</string>
+    <string name="settings_static_wallpapers">الخلفيات الثابتة والملونة</string>
+    <string name="settings_classic_styles">الأنماط الكلاسيكية</string>
+    <string name="settings_motion_wallpapers">خلفيات متحركة</string>
+    <string name="settings_live_motion">الحركة الحية</string>
+    <string name="settings_system_animations">الرسوم المتحركة للنظام</string>
+    <string name="settings_global_speed">سرعة الرسوم المتحركة العامة</string>
+    <string name="settings_system_feedback">ردود فعل النظام</string>
+    <string name="settings_haptic_feedback">ردود الفعل اللمسية</string>
+    <string name="settings_local_only">وضع تخزين الجهاز المحلي</string>
+    <string name="settings_local_only_sub">عند تفعيله، يتم حفظ الدردشات والوسائط الخاصة بك على هذا الجهاز فقط وتتجاوز خوادم مزامنة السحابة تمامًا.</string>
+    <string name="settings_security_display">الأمان والشاشة</string>
+    <string name="settings_allow_screenshots">السماح بلقطات الشاشة</string>
+    <string name="settings_maintenance">الصيانة</string>
+    <string name="settings_clear_cache">مسح ذاكرة التخزين المؤقت للتطبيق</string>
+    <string name="settings_cache_cleared_toast">تم مسح ذاكرة التخزين المؤقت بنجاح</string>
+    <string name="settings_report_bug">الإبلاغ عن خطأ</string>
+    <string name="settings_report_bug_sub">أبلغ عن الأعطال مباشرة إلى ديسكورد وفايربيس</string>
+</resources>

@@ -1,0 +1,10 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare binary files to prevent corruption
+*.jar binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.ico binary

@@ -1,0 +1,77 @@
+--- app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
++++ app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
+@@ -488,6 +488,10 @@
+     val discoveryRequestedUserIds = MutableStateFlow<Set<String>>(emptySet())
+ 
++    private val _outgoingPendingRequests = MutableStateFlow<List<FriendRequest>>(emptyList())
++    val outgoingPendingRequests: StateFlow<List<FriendRequest>> = _outgoingPendingRequests.asStateFlow()
++    
++    private var outgoingRequestListener: kotlinx.coroutines.Job? = null
+     val currentUserProfile = MutableStateFlow<UserProfile?>(null)
+ 
+@@ -2616,10 +2620,48 @@
+     fun startListeningForChats() {
+         val uid = currentUserId
+         if (uid.isEmpty()) return
+         
+         startListeningToCurrentUserProfile()
+         fetchPendingInvitations()
+         fetchPendingFriendRequests()
+         startListeningToContacts()
++        startListeningForOutgoingRequestAcceptance()
+         
+         chatsListener?.cancel()
+         chatsListener = viewModelScope.launch {
+             val channel = supabase.channel("chats_$uid")
+-            val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
++            val flow = channel.postgresChangeFlow<io.github.jan.supabase.realtime.PostgresAction>(schema = "public") {
+                 table = "chats"
+-                // Assuming postgres array containment filter
+-                // Or we can fetch all and filter client side if filter is complex
++                filter = "participantUids=cs.{$uid}"
+             }
+             
+-            // Initial fetch
+-            try {
+-                // In Supabase Postgrest, we use 'cs' (contains) for array column
+-                val chatList = supabase.postgrest["chats"].select {
+-                    filter {
+-                        // CS filter for participantUids array
+-                        // IO Github Jan library might use different syntax
+-                    }
+-                }.decodeList<ChatRoom>().filter { it.participantUids.contains(uid) }
+-                
+-                _chats.value = chatList.sortedByDescending { it.lastMessageTimestamp ?: 0 }
+-                fetchUsersForChats(chatList)
+-            } catch (e: Exception) {
+-                Log.e("Plenxo", "Initial chats fetch failed", e)
+-            }
++            refreshChatsForCurrentUser(uid)
+             
+             flow.collect {
+-                try {
+-                    val chatList = supabase.postgrest["chats"].select().decodeList<ChatRoom>().filter { it.participantUids.contains(uid) }
+-                    _chats.value = chatList.sortedByDescending { it.lastMessageTimestamp ?: 0 }
+-                    fetchUsersForChats(chatList)
+-                } catch (e: Exception) {
+-                    Log.e("Plenxo", "Chats update fetch failed", e)
+-                }
++                refreshChatsForCurrentUser(uid)
+             }
+         }
+     }
+ 
++    private suspend fun refreshChatsForCurrentUser(uid: String) {
++        try {
++            val chatList = supabase.postgrest["chats"].select {
++                filter {
++                    contains("participantUids", listOf(uid))
++                }
++            }.decodeList<ChatRoom>()
++            _chats.value = chatList.sortedByDescending { it.lastMessageTimestamp ?: 0 }
++            fetchUsersForChats(chatList)
++        } catch (e: Exception) {
++            Log.e("Plenxo", "Chats refresh failed", e)
++        }
++    }
++

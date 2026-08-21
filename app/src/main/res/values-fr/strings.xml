@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Plenxo</string>
+    <string name="settings_title">Paramètres de l\'application</string>
+    <string name="settings_appearance">Apparence de l\'application</string>
+    <string name="settings_theme_mode">Mode thème de l\'application</string>
+    <string name="settings_language">Langue de l\'application</string>
+    <string name="settings_select_theme_title">Sélectionner le mode thème</string>
+    <string name="settings_select_language_title">Sélectionner la langue</string>
+    <string name="cancel">Annuler</string>
+    <string name="save">Enregistrer</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_enable_notifications">Activer les notifications</string>
+    <string name="settings_notification_ringtone">Sonnerie de notification</string>
+    <string name="settings_ringtone_sub">Appuyez sur une sonnerie pour l\'écouter, puis cliquez sur Enregistrer pour l\'appliquer.</string>
+    <string name="settings_chat_wallpaper">Fond d\'écran de discussion</string>
+    <string name="settings_static_wallpapers">Fonds d\'écran statiques et de couleurs</string>
+    <string name="settings_classic_styles">Styles classiques</string>
+    <string name="settings_motion_wallpapers">Fonds d\'écran animés</string>
+    <string name="settings_live_motion">MOUVEMENT EN DIRECT</string>
+    <string name="settings_system_animations">Animations système</string>
+    <string name="settings_global_speed">Vitesse d\'animation globale</string>
+    <string name="settings_system_feedback">Retour d\'information système</string>
+    <string name="settings_haptic_feedback">Retour haptique</string>
+    <string name="settings_local_only">Mode de stockage local de l\'appareil</string>
+    <string name="settings_local_only_sub">Une fois activé, vos discussions et médias sont enregistrés uniquement sur cet appareil et contournent complètement les serveurs de synchronisation.</string>
+    <string name="settings_security_display">Sécurité et affichage</string>
+    <string name="settings_allow_screenshots">Autoriser les captures d\'écran</string>
+    <string name="settings_maintenance">Maintenance</string>
+    <string name="settings_clear_cache">Vider le cache de l\'application</string>
+    <string name="settings_cache_cleared_toast">Cache vidé avec succès</string>
+    <string name="settings_report_bug">Signaler un bogue</string>
+    <string name="settings_report_bug_sub">Signalez les bogues directement à Discord et Firebase</string>
+</resources>

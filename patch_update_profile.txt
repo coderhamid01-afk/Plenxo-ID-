@@ -1,0 +1,22 @@
+--- app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
++++ app/src/main/java/com/example/viewmodel/PlenxoViewModel.kt
+@@ -2227,10 +2227,17 @@
+     fun updateProfile(newDisplayName: String, newAbout: String) {
+         displayName.value = newDisplayName
+         updateAboutText(newAbout)
++        val avatarUrl = uploadedProfilePicUrl.value
+         viewModelScope.launch {
+             try {
+                 if (currentUserId.isNotEmpty()) {
+-                    firestore.collection("users").document(currentUserId)
+-                        .update(mapOf("displayName" to newDisplayName, "about" to newAbout))
++                    val updates = mutableMapOf<String, Any>("displayName" to newDisplayName, "about" to newAbout)
++                    if (!avatarUrl.isNullOrEmpty()) {
++                        updates["profilePicUrl"] = avatarUrl
++                        updates["avatar_url"] = avatarUrl
++                    }
++                    firestore.collection("users_data").document(currentUserId)
++                        .set(updates, com.google.firebase.firestore.SetOptions.merge())
+                 }
+             } catch (e: Exception) {
+                 Log.e("Plenxo", "Cloud profile sync failed: ${e.message}")

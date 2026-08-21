@@ -1,0 +1,26 @@
+--- app/src/main/java/com/example/ui/ChatsListScreen.kt
++++ app/src/main/java/com/example/ui/ChatsListScreen.kt
+@@ -226,12 +226,14 @@
+                         val displayAvatarUrl = currentUserProfile?.profilePicUrl?.takeIf { it.isNotEmpty() }
+                             ?: galleryImageUriString?.takeIf { it.isNotEmpty() }
+                         com.example.ui.components.ProfileRingBox(ringId = userRingId, ringPadding = 1.dp, borderWidth = 2.dp) {
+-                            if (!displayAvatarUrl.isNullOrEmpty()) {
++                            if (!displayAvatarUrl.isNullOrEmpty() && (displayAvatarUrl.startsWith("http") || displayAvatarUrl.startsWith("content://") || displayAvatarUrl.startsWith("file://"))) {
+                                 coil.compose.AsyncImage(
+                                     model = coil.request.ImageRequest.Builder(contextLocal)
+                                         .data(displayAvatarUrl)
+                                         .crossfade(true)
++                                        .diskCachePolicy(coil.request.CachePolicy.DISABLED)
++                                        .memoryCachePolicy(coil.request.CachePolicy.DISABLED)
+                                         .build(),
+                                     placeholder = androidx.compose.ui.res.painterResource(android.R.drawable.ic_menu_gallery),
+                                     error = androidx.compose.ui.res.painterResource(android.R.drawable.ic_menu_report_image),
+@@ -249,7 +251,7 @@
+                                     contentAlignment = Alignment.Center
+                                 ) {
+                                     Text(
+-                                        text = currentUserProfile?.displayName?.take(1)?.uppercase() ?: "U",
++                                        text = currentUserProfile?.displayName?.takeIf { it.isNotBlank() }?.take(1)?.uppercase() ?: "U",
+                                         color = Color.White,
+                                         fontWeight = FontWeight.Bold,
+                                         fontSize = 14.sp

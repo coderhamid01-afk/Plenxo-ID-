@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep Space Black -->
+    <color name="deep_space_black">#0A0A0A</color>
+    <!-- Electric Violet -->
+    <color name="electric_violet">#8A2BE2</color>
+    <!-- Cyan -->
+    <color name="cyan">#00FFFF</color>
+    <!-- Glass Background -->
+    <color name="glass_bg">#1AFFFFFF</color>
+    
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB0B0B0</color>
+</resources>
