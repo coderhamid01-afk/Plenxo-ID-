@@ -49,6 +49,21 @@ class DeepLinkHandlerActivity : ComponentActivity() {
         val incomingUri = intent?.data
         Log.d("DeepLinkHandler", "Received deep link uri: $incomingUri")
 
+        if (incomingUri != null) {
+            val path = incomingUri.path ?: ""
+            val host = incomingUri.host ?: ""
+            if (path.startsWith("/user/") || host == "user" || host.contains("monumental-kangaroo") || host.contains("plenxo.app") || host.contains("plenxo.netlify.app")) {
+                Log.d("DeepLinkHandler", "Bypassing auth verification for profile deep link -> forwarding to MainActivity")
+                val mainIntent = Intent(this, MainActivity::class.java).apply {
+                    data = incomingUri
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                }
+                startActivity(mainIntent)
+                finish()
+                return
+            }
+        }
+
         setContent {
             PlenxoTheme {
                 DeepLinkHandlerScreen(

@@ -99,9 +99,6 @@ class MainActivity : BaseActivity() {
             ).show()
         }
 
-        // Extract and display App SHA-256 Fingerprint for Debug
-        showAppSha256Fingerprint()
-        
         // Enable modern Edge-to-Edge window insets
         enableEdgeToEdge()
         val permissionManager = PermissionManager(this)
@@ -233,30 +230,6 @@ class MainActivity : BaseActivity() {
             
         } catch (e: Exception) {
             Log.e("DEBUG_UI", "Error loading Main XML and UI integration", e)
-        }
-    }
-
-    private fun showAppSha256Fingerprint() {
-        try {
-            val pm = packageManager
-            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val packageInfo = pm.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
-                packageInfo.signingInfo?.apkContentsSigners
-            } else {
-                @Suppress("DEPRECATION")
-                val packageInfo = pm.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNATURES)
-                packageInfo.signatures
-            }
-
-            signatures?.firstOrNull()?.let { signature ->
-                val md = java.security.MessageDigest.getInstance("SHA-256")
-                val digest = md.digest(signature.toByteArray())
-                val hexString = digest.joinToString(":") { String.format("%02X", it) }
-                Log.d("AppFingerprintDebug", "SHA-256 Fingerprint: $hexString")
-                Toast.makeText(this, "SHA-256: $hexString", Toast.LENGTH_LONG).show()
-            }
-        } catch (e: Exception) {
-            Log.e("AppFingerprintDebug", "Failed to extract SHA-256 fingerprint", e)
         }
     }
 }

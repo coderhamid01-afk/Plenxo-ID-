@@ -681,8 +681,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
         var extractedPlenxoId: String? = null
 
-        // HTTPS App Links: https://plenxo.app/user/{plenxo_id} or https://plenxo.netlify.app/user/{plenxo_id}
-        if ((scheme == "https" || scheme == "http") && (host == "plenxo.app" || host == "plenxo.netlify.app")) {
+        // HTTPS App Links: https://monumental-kangaroo-743f01.netlify.app/user/{plenxo_id}, https://plenxo.app/user/{plenxo_id}, or https://plenxo.netlify.app/user/{plenxo_id}
+        if ((scheme == "https" || scheme == "http") && (host == "monumental-kangaroo-743f01.netlify.app" || host == "plenxo.app" || host == "plenxo.netlify.app")) {
             if (path.startsWith("/user/")) {
                 extractedPlenxoId = path.removePrefix("/user/").trim()
             }

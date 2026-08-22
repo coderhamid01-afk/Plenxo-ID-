@@ -14,7 +14,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -32,9 +31,6 @@ class CloudChatRepositoryImpl(private val context: Context) : ChatDataRepository
 
     private val firestore: FirebaseFirestore
         get() = FirebaseFirestore.getInstance()
-
-    private val storage: FirebaseStorage
-        get() = FirebaseStorage.getInstance()
 
     private val catboxRepo: CatboxRepository by lazy { CatboxRepositoryImpl() }
 

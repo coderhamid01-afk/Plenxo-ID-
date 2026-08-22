@@ -8,15 +8,12 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.storage.FirebaseStorage
-import com.google.firebase.storage.StorageException
 import kotlinx.coroutines.tasks.await
 
 class AccountDeletionRepositoryImpl : AccountDeletionRepository {
 
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
-    private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
     private val fcm: FirebaseMessaging get() = FirebaseMessaging.getInstance()
 
     override suspend fun reauthenticateUser(password: String): Result<Unit> {
@@ -74,18 +71,8 @@ class AccountDeletionRepositoryImpl : AccountDeletionRepository {
                 Log.w("AccountDeletionRepo", "FCM deleteToken warning: ${ex.message}")
             }
 
-            // STEP 3: Firebase Storage Assets Cleanup
-            try {
-                val profileRef = storage.reference.child("profile_images/$uid.jpg")
-                profileRef.delete().await()
-                Log.d("AccountDeletionRepo", "Profile avatar successfully deleted from Firebase Storage")
-            } catch (ex: Exception) {
-                if (ex is StorageException && ex.errorCode == StorageException.ERROR_OBJECT_NOT_FOUND) {
-                    Log.d("AccountDeletionRepo", "No profile photo found in Storage for $uid; continuing pipeline.")
-                } else {
-                    Log.w("AccountDeletionRepo", "Firebase Storage deletion warning (ignored): ${ex.message}")
-                }
-            }
+            // STEP 3: Media Assets Note (Media hosted on Catbox.moe)
+            Log.d("AccountDeletionRepo", "Catbox.moe media links cleared with profile documents.")
 
             // STEP 4: Firestore Records Erase
             try {

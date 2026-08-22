@@ -18,7 +18,6 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -69,7 +68,6 @@ class ProfileSettingsViewModel(application: Application) : AndroidViewModel(appl
 
     private val auth get() = FirebaseAuth.getInstance()
     private val firestore get() = FirebaseFirestore.getInstance()
-    private val storage get() = FirebaseStorage.getInstance()
 
     val currentUid: String
         get() {

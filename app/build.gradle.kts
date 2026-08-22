@@ -127,7 +127,6 @@ dependencies {
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.auth)
   implementation(libs.firebase.firestore)
-  implementation(libs.firebase.storage)
   
   implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
   implementation(libs.androidx.media3.transformer)

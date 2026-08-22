@@ -66,6 +66,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="monumental-kangaroo-743f01.netlify.app" android:pathPrefix="/user/" />
                 <data android:scheme="https" android:host="plenxo.app" android:pathPrefix="/user/" />
                 <data android:scheme="https" android:host="plenxo.netlify.app" android:pathPrefix="/user/" />
             </intent-filter>
@@ -190,18 +191,18 @@
                 <data android:scheme="https" android:host="plenxo2.web.app" />
                 <data android:scheme="http" android:host="plenxo2.web.app" />
             </intent-filter>
-            <!-- Supabase Custom Deep Link Scheme -->
+            <!-- Auth Session Deep Link Scheme -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="plenxo" />
+                <data android:scheme="plenxo" android:host="auth" />
             </intent-filter>
         </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
+            android:authorities="com.coderhamid.plenxo.me.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

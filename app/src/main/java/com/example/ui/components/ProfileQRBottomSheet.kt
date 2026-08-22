@@ -59,7 +59,7 @@ fun ProfileQRBottomSheet(
     // Clean formatting for Plenxo ID
     val cleanPlenxoId = plenxoId.trim().removePrefix("@").removePrefix("#")
     val formattedPlenxoId = if (cleanPlenxoId.startsWith("PX-", ignoreCase = true)) cleanPlenxoId else "PX-$cleanPlenxoId"
-    val profileUrl = "https://plenxo.app/user/$cleanPlenxoId"
+    val profileUrl = "https://monumental-kangaroo-743f01.netlify.app/user/$cleanPlenxoId"
 
     var avatarBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
@@ -294,7 +294,7 @@ fun ProfileQRBottomSheet(
                 Button(
                     onClick = {
                         try {
-                            val cachePath = File(context.cacheDir, "images")
+                            val cachePath = context.cacheDir
                             cachePath.mkdirs()
                             val imageFile = File(cachePath, "plenxo_qr_$cleanPlenxoId.png")
                             val stream = FileOutputStream(imageFile)
@@ -302,9 +302,10 @@ fun ProfileQRBottomSheet(
                             stream.flush()
                             stream.close()
 
+                            val authority = "com.coderhamid.plenxo.me.fileprovider"
                             val contentUri: Uri = FileProvider.getUriForFile(
                                 context,
-                                "${context.packageName}.fileprovider",
+                                authority,
                                 imageFile
                             )
 
@@ -318,7 +319,9 @@ fun ProfileQRBottomSheet(
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
 
-                            val chooserIntent = Intent.createChooser(shareIntent, "Share Plenxo Profile QR")
+                            val chooserIntent = Intent.createChooser(shareIntent, "Share Plenxo Profile QR").apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
                             context.startActivity(chooserIntent)
                         } catch (e: Exception) {
                             Log.e("ProfileQRBottomSheet", "Failed to share QR image: ${e.message}", e)
