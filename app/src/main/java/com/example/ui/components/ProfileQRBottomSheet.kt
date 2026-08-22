@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
@@ -294,15 +295,18 @@ fun ProfileQRBottomSheet(
                 Button(
                     onClick = {
                         try {
-                            val cachePath = context.cacheDir
-                            cachePath.mkdirs()
-                            val imageFile = File(cachePath, "plenxo_qr_$cleanPlenxoId.png")
-                            val stream = FileOutputStream(imageFile)
-                            qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                            stream.flush()
-                            stream.close()
+                            val qrDir = File(context.cacheDir, "qr_shares").apply { mkdirs() }
+                            val imageFile = File(qrDir, "plenxo_qr_${cleanPlenxoId.ifBlank { "code" }}_${System.currentTimeMillis()}.png")
+                            if (imageFile.exists()) {
+                                imageFile.delete()
+                            }
+                            imageFile.createNewFile()
+                            FileOutputStream(imageFile).use { stream ->
+                                qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                stream.flush()
+                            }
 
-                            val authority = "com.coderhamid.plenxo.me.fileprovider"
+                            val authority = "${context.packageName}.fileprovider"
                             val contentUri: Uri = FileProvider.getUriForFile(
                                 context,
                                 authority,
@@ -316,12 +320,32 @@ fun ProfileQRBottomSheet(
                                     Intent.EXTRA_TEXT,
                                     "Connect with me on Plenxo! Profile Link: $profileUrl"
                                 )
+                                clipData = ClipData.newRawUri("Plenxo QR Code", contentUri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
 
                             val chooserIntent = Intent.createChooser(shareIntent, "Share Plenxo Profile QR").apply {
+                                clipData = ClipData.newRawUri("Plenxo QR Code", contentUri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
+
+                            try {
+                                val resInfoList = context.packageManager.queryIntentActivities(
+                                    chooserIntent,
+                                    PackageManager.MATCH_DEFAULT_ONLY
+                                )
+                                for (resolveInfo in resInfoList) {
+                                    val pkgName = resolveInfo.activityInfo.packageName
+                                    context.grantUriPermission(
+                                        pkgName,
+                                        contentUri,
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                }
+                            } catch (permEx: Exception) {
+                                Log.w("ProfileQRBottomSheet", "Permission grant notice: ${permEx.message}")
+                            }
+
                             context.startActivity(chooserIntent)
                         } catch (e: Exception) {
                             Log.e("ProfileQRBottomSheet", "Failed to share QR image: ${e.message}", e)

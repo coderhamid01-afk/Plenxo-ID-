@@ -756,22 +756,16 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun navigateToScreen(screen: PlenxoScreen, addToHistory: Boolean = true, clearHistory: Boolean = false) {
         try {
-            if (screen == PlenxoScreen.PROFILE_SETUP && _authState.value == AuthState.VERIFYING_OTP) {
+            if (screen == PlenxoScreen.PROFILE_SETUP) {
                 val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (currentUser == null) {
+                if (currentUser == null && tempSignupEmail.isBlank()) {
                     _errorMessage.value = "Authentication required. Please log in or sign up."
                     _authState.value = AuthState.UNAUTHENTICATED
                     resetOtpState()
-        _currentScreen.value = PlenxoScreen.LOGIN
+                    _currentScreen.value = PlenxoScreen.LOGIN
                     return
                 } else {
-                    // User is authenticated with Firebase Auth but has NOT completed
-                    // OTP verification yet (e.g. AuthStateListener fired immediately
-                    // after createUserWithEmailAndPassword, before the OTP code was
-                    // entered/confirmed). Never allow PROFILE_SETUP in this state —
-                    // force them back to OTP entry instead.
-                    _currentScreen.value = PlenxoScreen.OTP_VERIFICATION
-                    return
+                    _authState.value = AuthState.NEEDS_PROFILE_SETUP
                 }
             }
             synchronized(screenHistory) {
@@ -2629,8 +2623,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         _isLoading.value = false
                         val infoMsg = "2FA Verification Required: Please enter the 6-digit OTP code sent to $resolvedEmail"
                         _errorMessage.value = null
-        resetOtpState()
-        
+                        
                         try {
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(getApplication(), infoMsg, Toast.LENGTH_LONG).show()
@@ -2964,103 +2957,126 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         failedOtpAttempts = 0
                         clearError()
 
-                        if (tempSignupEmail.isNotBlank()) {
-                            val targetEmail = tempSignupEmail
-                            val targetPassword = tempSignupPassword
-                            val targetName = tempSignupName.ifBlank { targetEmail.substringBefore("@") }
+                        val isSignup = tempSignupEmail.isNotBlank() || (FirebaseAuth.getInstance().currentUser == null && (email.value.trim().isNotBlank() || tempSignupPassword.isNotBlank()))
 
-                            try {
-                                var currentFirebaseUser = FirebaseAuth.getInstance().currentUser
-                                if (currentFirebaseUser == null && targetPassword.isNotBlank()) {
+                        if (isSignup) {
+                            val targetEmail = if (tempSignupEmail.isNotBlank()) tempSignupEmail else email.value.trim()
+                            val targetPassword = if (tempSignupPassword.isNotBlank()) tempSignupPassword else password.value
+                            val targetName = tempSignupName.ifBlank { displayName.value.trim().ifBlank { targetEmail.substringBefore("@") } }
+
+                            var currentFirebaseUser = FirebaseAuth.getInstance().currentUser
+                            var createAccountError: Exception? = null
+                            var signInError: Exception? = null
+
+                            if (currentFirebaseUser == null && targetPassword.isNotBlank()) {
+                                try {
+                                    val authResult = kotlinx.coroutines.withTimeoutOrNull(20_000L) {
+                                        FirebaseAuth.getInstance().createUserWithEmailAndPassword(targetEmail, targetPassword).await()
+                                    }
+                                    currentFirebaseUser = authResult?.user ?: FirebaseAuth.getInstance().currentUser
+                                } catch (ex: Exception) {
+                                    createAccountError = ex
+                                    Log.e("PlenxoSignup", "createUserWithEmailAndPassword failed: ${ex.message}", ex)
                                     try {
-                                        val authResult = kotlinx.coroutines.withTimeoutOrNull(20_000L) {
-                                            FirebaseAuth.getInstance().createUserWithEmailAndPassword(targetEmail, targetPassword).await()
-                                        }
-                                        currentFirebaseUser = authResult?.user ?: FirebaseAuth.getInstance().currentUser
-                                    } catch (ex: Exception) {
-                                        // If account already exists in Firebase Auth, attempt sign in
-                                        try {
-                                            val loginRes = FirebaseAuth.getInstance().signInWithEmailAndPassword(targetEmail, targetPassword).await()
-                                            currentFirebaseUser = loginRes.user
-                                        } catch (_: Exception) {}
+                                        val loginRes = FirebaseAuth.getInstance().signInWithEmailAndPassword(targetEmail, targetPassword).await()
+                                        currentFirebaseUser = loginRes.user
+                                    } catch (signInEx: Exception) {
+                                        signInError = signInEx
+                                        Log.e("PlenxoSignup", "signInWithEmailAndPassword fallback failed: ${signInEx.message}", signInEx)
                                     }
                                 }
+                            }
 
-                                val uid = currentFirebaseUser?.uid ?: FirebaseAuth.getInstance().currentUser?.uid ?: ""
-                                if (uid.isNotEmpty()) {
-                                    try {
-                                        kotlinx.coroutines.withTimeoutOrNull(12_000L) {
-                                            val generatedPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
-                                            val generatedCode = generatedPxId.removePrefix("PX-")
-                                            val initialUserMap = mapOf(
-                                                "uid" to uid,
-                                                "id" to uid,
-                                                "email" to targetEmail,
-                                                "displayName" to targetName,
-                                                "plenxoId" to generatedPxId,
-                                                "userCode" to generatedCode,
-                                                "user_code" to generatedCode,
-                                                "px_id" to generatedPxId,
-                                                "px_code" to generatedCode,
-                                                "isEmailVerified" to true,
-                                                "emailVerified" to true,
-                                                "is_email_verified" to true,
-                                                "isProfileSetupCompleted" to false,
-                                                "isProfileSetup" to false,
-                                                "profileSetupCompleted" to false,
-                                                "created_at" to System.currentTimeMillis(),
-                                                "createdAt" to System.currentTimeMillis(),
-                                                "updatedAt" to System.currentTimeMillis()
-                                            )
-                                            firestore.collection("users").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                                            firestore.collection("users_data").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
+                            val uid = currentFirebaseUser?.uid ?: FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-                                            try {
-                                                val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-                                                val rdbMap = hashMapOf<String, Any>(
-                                                    "uid" to uid,
-                                                    "id" to uid,
-                                                    "email" to targetEmail,
-                                                    "displayName" to targetName,
-                                                    "name" to targetName,
-                                                    "plenxo_id" to generatedPxId,
-                                                    "plenxoId" to generatedPxId,
-                                                    "user_code" to generatedCode,
-                                                    "userCode" to generatedCode,
-                                                    "created_at" to System.currentTimeMillis(),
-                                                    "createdAt" to System.currentTimeMillis(),
-                                                    "is_profile_completed" to false,
-                                                    "is_email_verified" to true
-                                                )
-                                                rdbRef.updateChildren(rdbMap).await()
-                                                Log.d("PlenxoSignup", "Initial Realtime DB profile created for $uid ($targetEmail)")
-                                            } catch (rdbEx: Exception) {
-                                                Log.w("PlenxoSignup", "Failed Realtime DB write: ${rdbEx.message}")
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("PlenxoSignup", "Failed to write Firestore profile: ${e.message}", e)
-                                    }
-                                }
-
-                                tempSignupEmail = ""
-                                tempSignupPassword = ""
-                                tempSignupName = ""
-                                password.value = ""
-                                confirmPassword.value = ""
-
-                                _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                                navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
-                            } catch (authEx: Exception) {
-                                Log.e("PlenxoSignup", "Account creation/verification error: ${authEx.message}", authEx)
-                                val rawMessage = authEx.localizedMessage ?: authEx.message ?: authEx.toString()
-                                _errorMessage.value = rawMessage
+                            if (uid.isBlank()) {
+                                Log.e("PlenxoSignup", "Account creation failed: UID is blank after Auth attempts.")
+                                val detailMsg = createAccountError?.localizedMessage
+                                    ?: signInError?.localizedMessage
+                                    ?: "Account creation failed. Please check your credentials and connection."
+                                _errorMessage.value = "Account creation failed: $detailMsg"
                                 _isLoading.value = false
                                 return@withTimeoutOrNull
                             }
+
+                            val random6 = (100000..999999).random()
+                            val generatedPxId = "PX-$random6"
+                            val generatedCode = "$random6"
+
+                            plenxoId.value = generatedPxId
+                            revealedPlenxoId.value = generatedPxId
+
+                            // Asynchronously persist initial user profile to Firestore & Realtime DB
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val initialUserMap = mapOf(
+                                        "uid" to uid,
+                                        "id" to uid,
+                                        "email" to targetEmail,
+                                        "displayName" to targetName,
+                                        "plenxoId" to generatedPxId,
+                                        "userCode" to generatedCode,
+                                        "user_code" to generatedCode,
+                                        "px_id" to generatedPxId,
+                                        "px_code" to generatedCode,
+                                        "isEmailVerified" to true,
+                                        "emailVerified" to true,
+                                        "is_email_verified" to true,
+                                        "isProfileSetupCompleted" to false,
+                                        "isProfileSetup" to false,
+                                        "profileSetupCompleted" to false,
+                                        "created_at" to System.currentTimeMillis(),
+                                        "createdAt" to System.currentTimeMillis(),
+                                        "updatedAt" to System.currentTimeMillis()
+                                    )
+                                    firestore.collection("users").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
+                                    firestore.collection("users_data").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
+
+                                    try {
+                                        val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
+                                        val rdbMap = hashMapOf<String, Any>(
+                                            "uid" to uid,
+                                            "id" to uid,
+                                            "email" to targetEmail,
+                                            "displayName" to targetName,
+                                            "name" to targetName,
+                                            "plenxo_id" to generatedPxId,
+                                            "plenxoId" to generatedPxId,
+                                            "user_code" to generatedCode,
+                                            "userCode" to generatedCode,
+                                            "created_at" to System.currentTimeMillis(),
+                                            "createdAt" to System.currentTimeMillis(),
+                                            "is_profile_completed" to false,
+                                            "is_email_verified" to true
+                                        )
+                                        rdbRef.updateChildren(rdbMap)
+                                    } catch (rdbEx: Exception) {
+                                        Log.w("PlenxoSignup", "Failed Realtime DB write: ${rdbEx.message}")
+                                    }
+                                } catch (dbEx: Exception) {
+                                    Log.e("PlenxoSignup", "Async profile creation notice: ${dbEx.message}", dbEx)
+                                }
+                            }
+
+                            tempSignupEmail = ""
+                            tempSignupPassword = ""
+                            tempSignupName = ""
+                            password.value = ""
+                            confirmPassword.value = ""
+
+                            _authState.value = AuthState.NEEDS_PROFILE_SETUP
+                            _currentScreen.value = PlenxoScreen.PROFILE_SETUP
+                            _isLoading.value = false
                         } else {
                             // Login OTP challenge or existing user flow
                             val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+                            if (uid.isEmpty()) {
+                                Log.e("Plenxo", "OTP verification failed: No active Firebase Auth user session.")
+                                _errorMessage.value = "Authentication session expired or invalid. Please sign in again."
+                                _isLoading.value = false
+                                return@withTimeoutOrNull
+                            }
 
                             if (uid.isNotEmpty()) {
                                 try {
@@ -3134,8 +3150,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     } else {
                         failedOtpAttempts++
                         _errorMessage.value = null
-        resetOtpState()
-        
+                        
                         if (failedOtpAttempts >= 3) {
                             _isOtpButtonFrozen.value = true
                             _errorMessage.value = "Security Block: Too many failed OTP attempts. Verification is frozen for 60 seconds."
@@ -3145,7 +3160,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 failedOtpAttempts = 0
                             }
                         } else {
-                            _errorMessage.value = "Invalid OTP code. Please try again."
+                            val remaining = 3 - failedOtpAttempts
+                            _errorMessage.value = "Invalid OTP code. Please try again ($remaining attempts remaining)."
                         }
                     }
                 }
