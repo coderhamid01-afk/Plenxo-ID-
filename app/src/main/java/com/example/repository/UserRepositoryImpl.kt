@@ -58,9 +58,23 @@ class UserRepositoryImpl : UserRepository {
 
     override suspend fun createUserProfile(uid: String, email: String, name: String?, plenxoId: String?): Boolean {
         if (uid.isBlank()) return false
+
+        // Check if user document already exists before attempting creation
+        val userDocRef = firestore.collection("users").document(uid)
+        val userDataDocRef = firestore.collection("users_data").document(uid)
+        var existingSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
+        if (existingSnap == null || !existingSnap.exists()) {
+            existingSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
+        }
+
+        if (existingSnap != null && existingSnap.exists()) {
+            Log.d("UserRepositoryImpl", "User $uid already exists in Firestore. Preserving existing profile.")
+            return true
+        }
+
         val now = System.currentTimeMillis()
         val resolvedName = name?.ifBlank { null } ?: email.substringBefore("@").ifBlank { "User" }
-        val finalPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
+        val finalPxId = plenxoId?.takeIf { it.startsWith("PX-") } ?: com.example.model.resolveOrCreatePlenxoId(uid, firestore)
         val numericCode = finalPxId.removePrefix("PX-")
 
         val userData = mutableMapOf<String, Any?>(
@@ -80,12 +94,8 @@ class UserRepositoryImpl : UserRepository {
         )
 
         return try {
-            firestore.collection("users").document(uid)
-                .set(userData, SetOptions.merge())
-                .await()
-            firestore.collection("users_data").document(uid)
-                .set(userData, SetOptions.merge())
-                .await()
+            userDocRef.set(userData, SetOptions.merge()).await()
+            userDataDocRef.set(userData, SetOptions.merge()).await()
             Log.d("UserRepositoryImpl", "User profile created successfully for $uid with PX ID: $finalPxId")
             true
         } catch (e: Exception) {
@@ -103,47 +113,33 @@ class UserRepositoryImpl : UserRepository {
         status: String
     ): Boolean {
         if (uid.isBlank()) return false
-        val now = System.currentTimeMillis()
 
-        val resolvedDisplayName = displayName?.ifBlank { null }
-            ?: email.substringBefore("@").ifBlank { "User" }
+        val userDocRef = firestore.collection("users").document(uid)
+        val userDataDocRef = firestore.collection("users_data").document(uid)
 
-        val plenxoId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
-        val numericCode = plenxoId.removePrefix("PX-")
+        var userSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
+        if (userSnap == null || !userSnap.exists()) {
+            userSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
+        }
 
-        val userData = mutableMapOf<String, Any?>(
-            "uid" to uid,
-            "id" to uid,
-            "email" to email,
-            "displayName" to resolvedDisplayName,
-            "plenxoId" to plenxoId,
-            "userCode" to numericCode,
-            "user_code" to numericCode,
-            "px_id" to plenxoId,
-            "px_code" to numericCode,
-            "photoUrl" to (photoUrl ?: ""),
-            "profilePicUrl" to (photoUrl ?: ""),
-            "fcmToken" to (fcmToken ?: ""),
-            "status" to status,
-            "lastSeen" to now,
-            "createdAt" to now,
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-
-        return try {
-            firestore.collection("users_data").document(uid)
-                .set(userData, SetOptions.merge())
-                .await()
-
-            firestore.collection("users").document(uid)
-                .set(userData, SetOptions.merge())
-                .await()
-
-            Log.d("PlenxoProfileSync", "User Profile persisted successfully with plenxoId: $plenxoId")
-            true
-        } catch (e: Exception) {
-            Log.e("UserRepositoryImpl", "Failed syncing user data for $uid: ${e.message}", e)
-            false
+        if (userSnap != null && userSnap.exists()) {
+            Log.d("UserRepositoryImpl", "Returning user $uid already exists. Skipping profile overwrite during auth sync.")
+            try {
+                val updates = mutableMapOf<String, Any>(
+                    "status" to status,
+                    "lastSeen" to System.currentTimeMillis()
+                )
+                if (!fcmToken.isNullOrBlank()) {
+                    updates["fcmToken"] = fcmToken
+                }
+                userDocRef.update(updates).await()
+                userDataDocRef.update(updates).await()
+            } catch (e: Exception) {
+                Log.w("UserRepositoryImpl", "Non-profile update warning: ${e.message}")
+            }
+            return true
+        } else {
+            return createUserProfile(uid, email, displayName, null)
         }
     }
 

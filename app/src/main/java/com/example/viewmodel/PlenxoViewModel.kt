@@ -2688,27 +2688,52 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     try { registerE2EEKey() } catch (ignored: Throwable) {}
                     
                     try {
-                        val userDocDetailed = kotlinx.coroutines.withTimeoutOrNull(5000L) {
-                            FirebaseFirestore.getInstance().collection("users").document(uid).get().await()
+                        val userDocDetailed = kotlinx.coroutines.withTimeoutOrNull(6000L) {
+                            var doc = try { firestore.collection("users").document(uid).get().await() } catch (e: Throwable) { null }
+                            if (doc == null || !doc.exists()) {
+                                doc = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Throwable) { null }
+                            }
+                            doc
                         }
                         if (userDocDetailed != null && userDocDetailed.exists()) {
+                            val existingPxId = userDocDetailed.getString("plenxoId")
+                                ?: userDocDetailed.getString("plenxo_id")
+                                ?: userDocDetailed.getString("px_id")
+                                ?: userDocDetailed.getString("userCode")
+                                ?: ""
                             val name = userDocDetailed.getString("displayName") ?: userDocDetailed.getString("name") ?: ""
+                            val bioText = userDocDetailed.getString("bio") ?: userDocDetailed.getString("statusMessage") ?: ""
                             val em = userDocDetailed.getString("email") ?: resolvedEmail
-                            val code = userDocDetailed.getString("userCode") ?: userDocDetailed.getString("plenxoId") ?: ""
                             val phone = userDocDetailed.getString("phoneNumber") ?: ""
                             val theme = userDocDetailed.getString("themePreference") ?: "Blue"
-                            val pic = userDocDetailed.getString("profilePicUrl") ?: userDocDetailed.getString("avatarUrl") ?: ""
+                            val pic = userDocDetailed.getString("profilePicUrl")
+                                ?: userDocDetailed.getString("avatarUrl")
+                                ?: userDocDetailed.getString("avatar_url")
+                                ?: userDocDetailed.getString("photoUrl")
+                                ?: ""
+                            val ageStr = userDocDetailed.get("age")?.toString() ?: userDocDetailed.getString("dateOfBirth") ?: ""
 
+                            val formattedPxId = if (existingPxId.isNotBlank()) {
+                                if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
+                            } else {
+                                "PX-${(100000..999999).random()}"
+                            }
+
+                            if (formattedPxId.isNotBlank()) {
+                                plenxoId.value = formattedPxId
+                                revealedPlenxoId.value = formattedPxId
+                                userCode.value = formattedPxId.removePrefix("PX-")
+                            }
                             if (name.isNotBlank()) displayName.value = name
+                            if (bioText.isNotBlank()) aboutText.value = bioText
                             if (em.isNotBlank()) email.value = em
-                            if (code.isNotBlank()) userCode.value = code
                             if (phone.isNotBlank()) phoneNumber.value = phone
                             if (theme.isNotBlank()) selectedTheme.value = theme
 
                             if (pic.isNotBlank()) {
+                                galleryImageUriString.value = pic
                                 if (pic.startsWith("http")) {
                                     avatarType.value = "gallery"
-                                    galleryImageUriString.value = pic
                                 } else if (pic.contains(":")) {
                                     avatarType.value = "placeholder"
                                     val avatarList = maleAvatars + femaleAvatars
@@ -2721,9 +2746,42 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                     selectedEmoji.value = pic
                                 }
                             }
+
+                            SessionManager.saveUserProfileLocally(
+                                getApplication(),
+                                plenxoId = formattedPxId,
+                                displayName = name,
+                                bio = bioText,
+                                profilePicUrl = pic,
+                                age = ageStr
+                            )
+                        } else {
+                            // First time document creation for new account
+                            val generatedPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
+                            val numericCode = generatedPxId.removePrefix("PX-")
+                            val initialMap = mapOf(
+                                "uid" to uid,
+                                "id" to uid,
+                                "email" to resolvedEmail,
+                                "displayName" to resolvedEmail.substringBefore("@"),
+                                "plenxoId" to generatedPxId,
+                                "plenxo_id" to generatedPxId,
+                                "userCode" to numericCode,
+                                "user_code" to numericCode,
+                                "bio" to "",
+                                "profilePicUrl" to "",
+                                "isProfileSetupCompleted" to false,
+                                "createdAt" to System.currentTimeMillis()
+                            )
+                            firestore.collection("users").document(uid).set(initialMap, com.google.firebase.firestore.SetOptions.merge()).await()
+                            firestore.collection("users_data").document(uid).set(initialMap, com.google.firebase.firestore.SetOptions.merge()).await()
+
+                            plenxoId.value = generatedPxId
+                            revealedPlenxoId.value = generatedPxId
+                            userCode.value = numericCode
                         }
                     } catch (e: Throwable) {
-                        Log.e("Plenxo", "Failed to load user profile on login: ${e.message}", e)
+                        Log.e("Plenxo", "Failed to load/verify user profile on login: ${e.message}", e)
                     }
                     
                     try { startListeningForChats() } catch (ignored: Throwable) {}
@@ -3122,26 +3180,70 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 if (uid.isNotEmpty()) {
                                     try {
                                         kotlinx.coroutines.withTimeoutOrNull(8000L) {
-                                            val existingPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
-                                            val generatedCode = existingPxId.removePrefix("PX-")
-                                            val initialUser = mapOf(
-                                                "uid" to uid,
-                                                "id" to uid,
-                                                "email" to rawEmail,
-                                                "displayName" to rawEmail.substringBefore("@"),
-                                                "plenxoId" to existingPxId,
-                                                "userCode" to generatedCode,
-                                                "user_code" to generatedCode,
-                                                "px_id" to existingPxId,
-                                                "px_code" to generatedCode,
-                                                "lastLoginTimestamp" to System.currentTimeMillis()
-                                            )
-                                            firestore.collection("users").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
-                                            firestore.collection("users_data").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
-                                            Log.d("Plenxo", "Initial Firestore profile confirmed on OTP verification")
+                                            var docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
+                                            if (docSnap == null || !docSnap.exists()) {
+                                                docSnap = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Exception) { null }
+                                            }
+
+                                            if (docSnap != null && docSnap.exists()) {
+                                                // Returning user: Load existing details, DO NOT overwrite!
+                                                val existingPxId = docSnap.getString("plenxoId")
+                                                    ?: docSnap.getString("plenxo_id")
+                                                    ?: docSnap.getString("userCode")
+                                                    ?: ""
+                                                val existingName = docSnap.getString("displayName")
+                                                    ?: docSnap.getString("name")
+                                                    ?: ""
+                                                val existingBio = docSnap.getString("bio")
+                                                    ?: docSnap.getString("statusMessage")
+                                                    ?: ""
+                                                val existingPic = docSnap.getString("profilePicUrl")
+                                                    ?: docSnap.getString("avatar_url")
+                                                    ?: ""
+                                                val existingAge = docSnap.get("age")?.toString()
+                                                    ?: docSnap.getString("dateOfBirth")
+                                                    ?: ""
+
+                                                if (existingPxId.isNotBlank()) {
+                                                    val formatted = if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
+                                                    plenxoId.value = formatted
+                                                    userCode.value = formatted.removePrefix("PX-")
+                                                }
+                                                if (existingName.isNotBlank()) displayName.value = existingName
+                                                if (existingBio.isNotBlank()) aboutText.value = existingBio
+                                                if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
+
+                                                SessionManager.saveUserProfileLocally(
+                                                    getApplication(),
+                                                    plenxoId = plenxoId.value,
+                                                    displayName = existingName,
+                                                    bio = existingBio,
+                                                    profilePicUrl = existingPic,
+                                                    age = existingAge
+                                                )
+                                            } else {
+                                                // New signup without doc: create initial doc
+                                                val existingPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
+                                                val generatedCode = existingPxId.removePrefix("PX-")
+                                                val initialUser = mapOf(
+                                                    "uid" to uid,
+                                                    "id" to uid,
+                                                    "email" to rawEmail,
+                                                    "displayName" to rawEmail.substringBefore("@"),
+                                                    "plenxoId" to existingPxId,
+                                                    "userCode" to generatedCode,
+                                                    "user_code" to generatedCode,
+                                                    "px_id" to existingPxId,
+                                                    "px_code" to generatedCode,
+                                                    "lastLoginTimestamp" to System.currentTimeMillis()
+                                                )
+                                                firestore.collection("users").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
+                                                firestore.collection("users_data").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
+                                                Log.d("Plenxo", "Initial Firestore profile created on OTP verification")
+                                            }
                                         }
                                     } catch (e: Exception) {
-                                        Log.e("Plenxo", "Failed to confirm initial Firestore profile: ${e.message}", e)
+                                        Log.e("Plenxo", "Failed in OTP verification profile logic: ${e.message}", e)
                                     }
                                 }
                                 navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)

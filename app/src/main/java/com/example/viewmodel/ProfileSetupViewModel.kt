@@ -60,6 +60,31 @@ class ProfileSetupViewModel : ViewModel() {
             if (currentUser.photoUrl != null && profilePictureUri.value == null) {
                 profilePictureUri.value = currentUser.photoUrl
             }
+
+            val uid = currentUser.uid
+            viewModelScope.launch {
+                try {
+                    var docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
+                    if (docSnap == null || !docSnap.exists()) {
+                        docSnap = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Exception) { null }
+                    }
+                    if (docSnap != null && docSnap.exists()) {
+                        val name = docSnap.getString("displayName") ?: docSnap.getString("name") ?: ""
+                        val b = docSnap.getString("bio") ?: docSnap.getString("statusMessage") ?: ""
+                        val pic = docSnap.getString("profilePicUrl") ?: docSnap.getString("avatar_url") ?: docSnap.getString("photoUrl") ?: ""
+                        val dob = docSnap.getLong("dobTimestamp")
+
+                        if (name.isNotBlank()) displayName.value = name
+                        if (b.isNotBlank()) bio.value = b
+                        if (dob != null && dob > 0L) dobMillis.value = dob
+                        if (pic.isNotBlank() && profilePictureUri.value == null) {
+                            try { profilePictureUri.value = Uri.parse(pic) } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("ProfileSetupVM", "Pre-fetch profile warning: ${e.message}")
+                }
+            }
         }
     }
 

@@ -182,6 +182,76 @@ class AuthRepositoryImpl : AuthRepository {
             val userId = firebaseUser.uid
             Log.d("AuthRepositoryImpl", "Firebase login success for $resolvedEmail (userId: $userId)")
 
+            // Check Before Write Logic: Verify if user profile document exists in Firestore
+            try {
+                val userDocRef = firestore.collection("users").document(userId)
+                val userDataDocRef = firestore.collection("users_data").document(userId)
+                var userSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
+                if (userSnap == null || !userSnap.exists()) {
+                    userSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
+                }
+
+                if (userSnap != null && userSnap.exists()) {
+                    // STEP B: IF IT EXISTS (Returning User): DO NOT write or overwrite anything in Firestore.
+                    val existingPxId = userSnap.getString("plenxoId")
+                        ?: userSnap.getString("plenxo_id")
+                        ?: userSnap.getString("px_id")
+                        ?: userSnap.getString("userCode")
+                        ?: ""
+                    val existingName = userSnap.getString("displayName")
+                        ?: userSnap.getString("name")
+                        ?: ""
+                    val existingBio = userSnap.getString("bio")
+                        ?: userSnap.getString("statusMessage")
+                        ?: ""
+                    val existingPic = userSnap.getString("profilePicUrl")
+                        ?: userSnap.getString("avatar_url")
+                        ?: userSnap.getString("photoUrl")
+                        ?: ""
+                    val existingAge = userSnap.get("age")?.toString()
+                        ?: userSnap.getString("dateOfBirth")
+                        ?: ""
+
+                    Log.d("AuthRepositoryImpl", "Returning user $userId exists. Preserving Plenxo ID: $existingPxId, Name: $existingName")
+                    try {
+                        val appCtx = com.example.PlenxoApplication.instance
+                        com.example.util.SessionManager.saveUserProfileLocally(
+                            appCtx,
+                            plenxoId = existingPxId,
+                            displayName = existingName,
+                            bio = existingBio,
+                            profilePicUrl = existingPic,
+                            age = existingAge
+                        )
+                    } catch (e: Exception) {
+                        Log.w("AuthRepositoryImpl", "Failed to save profile locally: ${e.message}")
+                    }
+                } else {
+                    // IF IT DOES NOT EXIST (New Sign-Up / First Time User without document):
+                    // ONLY THEN generate a new Plenxo ID and create a new document in Firestore.
+                    val generatedPlenxoId = com.example.model.resolveOrCreatePlenxoId(userId, firestore)
+                    val numericCode = generatedPlenxoId.removePrefix("PX-")
+                    val initialData = mapOf(
+                        "uid" to userId,
+                        "id" to userId,
+                        "email" to resolvedEmail,
+                        "plenxoId" to generatedPlenxoId,
+                        "plenxo_id" to generatedPlenxoId,
+                        "userCode" to numericCode,
+                        "user_code" to numericCode,
+                        "displayName" to resolvedEmail.substringBefore("@"),
+                        "bio" to "",
+                        "profilePicUrl" to "",
+                        "isProfileSetupCompleted" to false,
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    userDocRef.set(initialData, com.google.firebase.firestore.SetOptions.merge()).await()
+                    userDataDocRef.set(initialData, com.google.firebase.firestore.SetOptions.merge()).await()
+                }
+            } catch (e: Exception) {
+                Log.e("AuthRepositoryImpl", "Check before write error on login: ${e.message}", e)
+            }
+
             // Update login count asynchronously
             try {
                 val count = getLoginCount(resolvedEmail)

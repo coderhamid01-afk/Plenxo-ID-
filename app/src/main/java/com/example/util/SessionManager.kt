@@ -32,6 +32,11 @@ object SessionManager {
     private const val KEY_APPLOCK_TYPE = "key_applock_type"
     private const val KEY_APPLOCK_CREDENTIAL = "key_applock_credential"
     private const val KEY_SESSION_ID = "key_session_id"
+    private const val KEY_PLENXO_ID = "key_plenxo_id"
+    private const val KEY_DISPLAY_NAME = "key_display_name"
+    private const val KEY_BIO = "key_bio"
+    private const val KEY_PROFILE_PIC_URL = "key_profile_pic_url"
+    private const val KEY_USER_AGE = "key_user_age"
 
     private fun getEncryptedPrefs(context: Context): SharedPreferences? {
         return try {
@@ -223,6 +228,44 @@ object SessionManager {
             Log.e("SessionManager", "Error clearing login state", e)
         }
     }
+
+    fun saveUserProfileLocally(
+        context: Context,
+        plenxoId: String,
+        displayName: String,
+        bio: String,
+        profilePicUrl: String,
+        age: String = ""
+    ) {
+        try {
+            getEncryptedPrefs(context)?.edit()?.apply {
+                if (plenxoId.isNotBlank()) putString(KEY_PLENXO_ID, plenxoId)
+                if (displayName.isNotBlank()) putString(KEY_DISPLAY_NAME, displayName)
+                if (bio.isNotBlank()) putString(KEY_BIO, bio)
+                if (profilePicUrl.isNotBlank()) putString(KEY_PROFILE_PIC_URL, profilePicUrl)
+                if (age.isNotBlank()) putString(KEY_USER_AGE, age)
+                apply()
+            }
+            Log.d("SessionManager", "Saved user profile locally: plenxoId=$plenxoId, name=$displayName")
+        } catch (e: Exception) {
+            Log.e("SessionManager", "Error saving user profile locally", e)
+        }
+    }
+
+    fun getLocalPlenxoId(context: Context): String =
+        getEncryptedPrefs(context)?.getString(KEY_PLENXO_ID, "") ?: ""
+
+    fun getLocalDisplayName(context: Context): String =
+        getEncryptedPrefs(context)?.getString(KEY_DISPLAY_NAME, "") ?: ""
+
+    fun getLocalBio(context: Context): String =
+        getEncryptedPrefs(context)?.getString(KEY_BIO, "") ?: ""
+
+    fun getLocalProfilePicUrl(context: Context): String =
+        getEncryptedPrefs(context)?.getString(KEY_PROFILE_PIC_URL, "") ?: ""
+
+    fun getLocalAge(context: Context): String =
+        getEncryptedPrefs(context)?.getString(KEY_USER_AGE, "") ?: ""
 
     fun saveScreenshotsBlocked(context: Context, blocked: Boolean) {
         getEncryptedPrefs(context)?.edit()?.putBoolean(KEY_BLOCK_SCREENSHOTS, blocked)?.apply()
