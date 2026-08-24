@@ -104,7 +104,7 @@ fun UserProfileScreen(
             }
             try {
                 val db = FirebaseFirestore.getInstance()
-                val doc = db.collection("users_data").document(userId).get().await()
+                val doc = db.collection("users").document(userId).get().await()
                 if (doc.exists()) {
                     val dName = doc.getString("displayName")
                         ?: doc.getString("fullName")
@@ -156,62 +156,11 @@ fun UserProfileScreen(
                         profileRingId = ring,
                         dob = dob
                     )
-                } else {
-                    val userDoc = db.collection("users").document(userId).get().await()
-                    if (userDoc.exists()) {
-                        val dName = userDoc.getString("displayName")
-                            ?: userDoc.getString("fullName")
-                            ?: userDoc.getString("name")
-                            ?: userProfile?.displayName
-                            ?: "User"
-                        val pPic = userDoc.getString("profilePicUrl")
-                            ?: userDoc.getString("avatar_url")
-                            ?: userDoc.getString("photoUrl")
-                            ?: userProfile?.profilePicUrl
-                            ?: ""
-                        val pId = userDoc.getString("plenxoId")
-                            ?: userDoc.getString("userCode")
-                            ?: userDoc.getString("username")
-                            ?: userProfile?.plenxoId
-                            ?: ""
-                        val ring = userDoc.getString("profileRingId")
-                            ?: userDoc.getString("selectedRingId")
-                            ?: userProfile?.profileRingId
-                            ?: "none"
-                        val bio = userDoc.getString("bio")
-                            ?: userDoc.getString("about")
-                            ?: userDoc.getString("statusMessage")
-                            ?: ""
-                        val bVis = userDoc.getString("bioVisibility")
-                            ?: userDoc.getString("bioVis")
-                            ?: "PUBLIC"
-                        val gender = userDoc.getString("gender") ?: ""
-                        val dob = userDoc.getString("date_of_birth")
-                            ?: userDoc.getString("dateOfBirth")
-                            ?: userDoc.getString("dob")
-                            ?: userDoc.getString("birthDate")
-                            ?: userProfile?.dob
-                            ?: ""
-
-                        bioText = bio
-                        bioVisibility = bVis
-                        genderText = gender
-                        rawDobText = dob
-
-                        userProfile = User(
-                            uid = userId,
-                            displayName = dName,
-                            profilePicUrl = pPic,
-                            plenxoId = pId,
-                            profileRingId = ring,
-                            dob = dob
-                        )
-                    }
                 }
 
                 // Check connection / friend status
                 if (!isSelf && currentUid.isNotBlank()) {
-                    val friendDoc = db.collection("users_data").document(currentUid).collection("friends").document(userId).get().await()
+                    val friendDoc = db.collection("users").document(currentUid).collection("friends").document(userId).get().await()
                     val contactDoc = db.collection("contacts").whereEqualTo("user_id", currentUid).whereEqualTo("contact_id", userId).get().await()
                     if (friendDoc.exists() || !contactDoc.isEmpty) {
                         connectionStatus = "ACCEPTED"

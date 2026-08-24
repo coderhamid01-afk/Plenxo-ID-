@@ -29,7 +29,7 @@ class ProfileRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(targetId)
+        val docRef = firestore.collection("users").document(targetId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null || !snapshot.exists()) {
                 trySend(null)
@@ -59,7 +59,7 @@ class ProfileRepository {
         val targetId = if (userId.isBlank()) currentUid else userId
 
         try {
-            firestore.collection("users_data").document(targetId)
+            firestore.collection("users").document(targetId)
                 .set(updates, SetOptions.merge())
                 .await()
             Log.d("ProfileRepository", "Profile updated in Firestore for $targetId")

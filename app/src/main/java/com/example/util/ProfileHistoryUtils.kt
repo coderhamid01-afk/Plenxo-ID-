@@ -21,13 +21,12 @@ object ProfileHistoryUtils {
 
         val currentTimestamp = System.currentTimeMillis()
         val userDocRef = firestore.collection("users").document(uid)
-        val userDataDocRef = firestore.collection("users_data").document(uid)
 
         // 1. Fetch current snapshot to read existing name, bio, profileUrl
         val snapshot = try {
             userDocRef.get().await()
         } catch (e: Exception) {
-            try { userDataDocRef.get().await() } catch (_: Exception) { null }
+            null
         }
 
         val oldName = snapshot?.getString("displayName")
@@ -138,17 +137,11 @@ object ProfileHistoryUtils {
             }
         }
 
-        // Write to Firestore users and users_data
+        // Write to Firestore users
         try {
             userDocRef.set(updates, SetOptions.merge()).await()
         } catch (e: Exception) {
             Log.w("ProfileHistory", "Error updating users doc: ${e.message}")
-        }
-
-        try {
-            userDataDocRef.set(updates, SetOptions.merge()).await()
-        } catch (e: Exception) {
-            Log.w("ProfileHistory", "Error updating users_data doc: ${e.message}")
         }
 
         // Write to Realtime Database

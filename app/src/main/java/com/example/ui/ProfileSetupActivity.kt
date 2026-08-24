@@ -105,7 +105,7 @@ class ProfileSetupActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val doc = FirebaseFirestore.getInstance().collection("users_data").document(uid).get().await()
+                val doc = FirebaseFirestore.getInstance().collection("users").document(uid).get().await()
                 val user = doc.toObject(com.example.model.UserProfile::class.java)
 
                 if (user != null) {
@@ -181,7 +181,7 @@ class ProfileSetupActivity : AppCompatActivity() {
                     "isProfileCompleted" to true
                 )
 
-                FirebaseFirestore.getInstance().collection("users_data").document(uid).set(userMap, SetOptions.merge()).await()
+                FirebaseFirestore.getInstance().collection("users").document(uid).set(userMap, SetOptions.merge()).await()
 
                 Log.d("ProfileSetupActivity", "Saved profile to Firestore")
 

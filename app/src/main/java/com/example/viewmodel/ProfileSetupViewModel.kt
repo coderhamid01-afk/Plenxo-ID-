@@ -64,10 +64,7 @@ class ProfileSetupViewModel : ViewModel() {
             val uid = currentUser.uid
             viewModelScope.launch {
                 try {
-                    var docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
-                    if (docSnap == null || !docSnap.exists()) {
-                        docSnap = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Exception) { null }
-                    }
+                    val docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
                     if (docSnap != null && docSnap.exists()) {
                         val name = docSnap.getString("displayName") ?: docSnap.getString("name") ?: ""
                         val b = docSnap.getString("bio") ?: docSnap.getString("statusMessage") ?: ""
@@ -216,9 +213,6 @@ class ProfileSetupViewModel : ViewModel() {
                     )
 
                     firestore.collection("users").document(uid).set(userData, SetOptions.merge()).await()
-                    try {
-                        firestore.collection("users_data").document(uid).set(userData, SetOptions.merge()).await()
-                    } catch (_: Exception) {}
 
                     try {
                         val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)

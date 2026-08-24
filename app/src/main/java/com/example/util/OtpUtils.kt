@@ -98,13 +98,11 @@ object OtpUtils {
             withTimeoutOrNull(FIRESTORE_TIMEOUT_MS) {
                 // 1. By direct document ID lookup
                 runCatching { firestore.collection("users").document(cleanId).get().await() }.getOrNull()?.let { extractFromDoc(it) }
-                runCatching { firestore.collection("users_data").document(cleanId).get().await() }.getOrNull()?.let { extractFromDoc(it) }
                 runCatching { firestore.collection("otp_codes").document(cleanId).get().await() }.getOrNull()?.let { extractFromDoc(it) }
 
                 // 2. By email query if identifier is or contains an email
                 if (cleanId.contains("@")) {
                     runCatching { firestore.collection("users").whereEqualTo("email", cleanId).get().await() }.getOrNull()?.documents?.forEach { extractFromDoc(it) }
-                    runCatching { firestore.collection("users_data").whereEqualTo("email", cleanId).get().await() }.getOrNull()?.documents?.forEach { extractFromDoc(it) }
                     runCatching { firestore.collection("otp_codes").whereEqualTo("email", cleanId).get().await() }.getOrNull()?.documents?.forEach { extractFromDoc(it) }
                 }
             }
@@ -145,7 +143,6 @@ object OtpUtils {
                     firestore.collection("otp_codes").document(cleanId).set(updateMap, com.google.firebase.firestore.SetOptions.merge()).await()
                 } else {
                     firestore.collection("users").document(cleanId).set(updateMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                    firestore.collection("users_data").document(cleanId).set(updateMap, com.google.firebase.firestore.SetOptions.merge()).await()
                 }
                 Log.d("OTP_FIX", "Successfully saved OTP '$cleanOtp' to Firestore for $cleanId")
             }

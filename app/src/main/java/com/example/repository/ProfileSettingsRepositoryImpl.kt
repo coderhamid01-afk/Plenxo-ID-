@@ -42,54 +42,7 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
         val docRef = firestore.collection("users").document(targetId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null || !snapshot.exists()) {
-                // Fallback to users_data
-                firestore.collection("users_data").document(targetId).get()
-                    .addOnSuccessListener { fallbackSnap ->
-                        if (fallbackSnap != null && fallbackSnap.exists()) {
-                            val data = fallbackSnap.data ?: emptyMap()
-                            val resolvedDisplayName = (data["displayName"] as? String)
-                                ?: (data["display_name"] as? String)
-                                ?: (data["name"] as? String)
-                                ?: ""
-                            val resolvedBio = (data["bio"] as? String)
-                                ?: (data["statusMessage"] as? String)
-                                ?: (data["status_message"] as? String)
-                                ?: ""
-                            val resolvedPicUrl = (data["profilePicUrl"] as? String)
-                                ?: (data["avatarUrl"] as? String)
-                                ?: (data["avatar_url"] as? String)
-                                ?: (data["photoUrl"] as? String)
-                                ?: (data["profileUrl"] as? String)
-                                ?: ""
-                            val resolvedEmail = (data["email"] as? String)?.takeIf { it.isNotBlank() }
-                                ?: firebaseAuth.currentUser?.email
-                                ?: ""
-                            val resolvedPlenxoId = (data["plenxoId"] as? String)
-                                ?: (data["plenxo_id"] as? String)
-                                ?: (data["userCode"] as? String)
-                                ?: (data["user_code"] as? String)
-                                ?: ""
-
-                            val profile = UserProfileDomainModel(
-                                id = fallbackSnap.id,
-                                userId = targetId,
-                                displayName = resolvedDisplayName,
-                                name = resolvedDisplayName,
-                                email = resolvedEmail,
-                                statusMessage = resolvedBio,
-                                bio = resolvedBio,
-                                profilePicUrl = resolvedPicUrl,
-                                profileUrl = resolvedPicUrl,
-                                userCode = resolvedPlenxoId,
-                                plenxoId = resolvedPlenxoId,
-                                selectedRingId = (data["selectedRingId"] as? String) ?: "",
-                                profileRingId = (data["profileRingId"] as? String) ?: ""
-                            )
-                            trySend(profile)
-                        } else {
-                            trySend(null)
-                        }
-                    }
+                trySend(null)
                 return@addSnapshotListener
             }
 
@@ -179,10 +132,6 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
                 .set(updates, SetOptions.merge())
                 .await()
 
-            firestore.collection("users_data").document(targetId)
-                .set(updates, SetOptions.merge())
-                .await()
-
             val profileUpdateBuilder = com.google.firebase.auth.UserProfileChangeRequest.Builder()
             if (name.isNotEmpty()) profileUpdateBuilder.setDisplayName(name)
             if (profileUrl.isNotEmpty() && (profileUrl.startsWith("http://") || profileUrl.startsWith("https://"))) {
@@ -190,7 +139,7 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
             }
             firebaseAuth.currentUser?.updateProfile(profileUpdateBuilder.build())?.await()
 
-            Log.d("ProfileSettingsRepo", "Profile updated successfully in Firestore users and users_data for $targetId")
+            Log.d("ProfileSettingsRepo", "Profile updated successfully in Firestore users for $targetId")
         } catch (e: Exception) {
             Log.e("ProfileSettingsRepo", "Failed to update profile in Firestore: ${e.message}")
             throw e
@@ -204,7 +153,7 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
 
         try {
             val updates = mapOf("selectedRingId" to ringId)
-            firestore.collection("users_data").document(targetId)
+            firestore.collection("users").document(targetId)
                 .set(updates, SetOptions.merge())
                 .await()
             Log.d("ProfileSettingsRepo", "Selected ring updated in Firestore for $targetId")
@@ -226,13 +175,10 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
                 "selectedRingId" to ringId,
                 "updatedAt" to System.currentTimeMillis()
             )
-            firestore.collection("users_data").document(targetId)
-                .set(updates, SetOptions.merge())
-                .await()
             firestore.collection("users").document(targetId)
                 .set(updates, SetOptions.merge())
                 .await()
-            Log.d("ProfileSettingsRepo", "Profile ring updated in Firestore users_data & users for $targetId")
+            Log.d("ProfileSettingsRepo", "Profile ring updated in Firestore users for $targetId")
         } catch (e: Exception) {
             Log.e("ProfileSettingsRepo", "Failed to update profile ring in Firestore: ${e.message}")
             throw e
@@ -247,11 +193,11 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
         val uploadedUrl = com.example.network.CatboxStorageManager.uploadImage(context, uri)
         Log.d("ProfileSettingsRepo", "Catbox upload completed successfully. CDN URL: $uploadedUrl")
 
-        // Synchronize with Firestore 'users_data' collection
+        // Synchronize with Firestore 'users' collection
         val currentUid = firebaseAuth.currentUser?.uid ?: ""
         if (currentUid.isNotEmpty()) {
-            Log.d("ProfileSettingsRepo", "Syncing profilePicUrl to Firestore 'users_data' collection for userId: $currentUid")
-            firestore.collection("users_data").document(currentUid)
+            Log.d("ProfileSettingsRepo", "Syncing profilePicUrl to Firestore 'users' collection for userId: $currentUid")
+            firestore.collection("users").document(currentUid)
                 .set(mapOf("profilePicUrl" to uploadedUrl, "avatar_url" to uploadedUrl, "photoUrl" to uploadedUrl), SetOptions.merge())
                 .await()
 
@@ -259,7 +205,7 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
                 .setPhotoUri(android.net.Uri.parse(uploadedUrl))
                 .build()
             firebaseAuth.currentUser?.updateProfile(req)?.await()
-            Log.d("ProfileSettingsRepo", "Firestore users_data document and FirebaseAuth updated successfully with new Catbox CDN URL.")
+            Log.d("ProfileSettingsRepo", "Firestore users document and FirebaseAuth updated successfully with new Catbox CDN URL.")
         } else {
             Log.w("ProfileSettingsRepo", "No active user session detected. Skipping database sync.")
         }

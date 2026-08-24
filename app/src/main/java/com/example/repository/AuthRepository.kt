@@ -84,7 +84,6 @@ class AuthRepositoryImpl : AuthRepository {
                 )
 
                 firestore.collection("users").document(userId).set(userData, com.google.firebase.firestore.SetOptions.merge()).await()
-                firestore.collection("users_data").document(userId).set(userData, com.google.firebase.firestore.SetOptions.merge()).await()
                 Log.d("PlenxoProfileSync", "User Profile persisted successfully with plenxoId: $generatedPlenxoId")
             } catch (dbEx: Exception) {
                 Log.e("AuthRepositoryImpl", "Failed/timed out inserting initial Firestore user document: ${dbEx.message}", dbEx)
@@ -109,7 +108,7 @@ class AuthRepositoryImpl : AuthRepository {
                 }
                 input
             } else {
-                // Dual login: Provided a Plenxo ID -> query Firestore 'users', 'users_data', & Realtime DB
+                // Dual login: Provided a Plenxo ID -> query Firestore 'users' collection & Realtime DB
                 var targetPlenxoId = input
                 if (!targetPlenxoId.uppercase().startsWith("PX-")) {
                     targetPlenxoId = "PX-$targetPlenxoId"
@@ -118,17 +117,14 @@ class AuthRepositoryImpl : AuthRepository {
 
                 var foundEmailStr: String? = null
 
-                // 1. Query 'users' collection
+                // 1. Query 'users' collection ONLY
                 val queriesToTry = listOf(
                     firestore.collection("users").whereEqualTo("plenxoId", targetPlenxoId.uppercase()),
                     firestore.collection("users").whereEqualTo("plenxo_id", targetPlenxoId.uppercase()),
                     firestore.collection("users").whereEqualTo("plenxoId", targetPlenxoId),
                     firestore.collection("users").whereEqualTo("plenxo_id", targetPlenxoId),
                     firestore.collection("users").whereEqualTo("userCode", rawNumericCode),
-                    firestore.collection("users").whereEqualTo("user_code", rawNumericCode),
-                    firestore.collection("users_data").whereEqualTo("plenxoId", targetPlenxoId.uppercase()),
-                    firestore.collection("users_data").whereEqualTo("plenxo_id", targetPlenxoId.uppercase()),
-                    firestore.collection("users_data").whereEqualTo("userCode", rawNumericCode)
+                    firestore.collection("users").whereEqualTo("user_code", rawNumericCode)
                 )
 
                 for (query in queriesToTry) {
@@ -182,17 +178,13 @@ class AuthRepositoryImpl : AuthRepository {
             val userId = firebaseUser.uid
             Log.d("AuthRepositoryImpl", "Firebase login success for $resolvedEmail (userId: $userId)")
 
-            // Check Before Write Logic: Verify if user profile document exists in Firestore
+            // Check Before Write Logic: Strictly await Firestore read for users/{uid}
             try {
                 val userDocRef = firestore.collection("users").document(userId)
-                val userDataDocRef = firestore.collection("users_data").document(userId)
-                var userSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
-                if (userSnap == null || !userSnap.exists()) {
-                    userSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
-                }
+                val userSnap = userDocRef.get().await()
 
                 if (userSnap != null && userSnap.exists()) {
-                    // STEP B: IF IT EXISTS (Returning User): DO NOT write or overwrite anything in Firestore.
+                    // Returning user: DO NOT write or overwrite anything in Firestore.
                     val existingPxId = userSnap.getString("plenxoId")
                         ?: userSnap.getString("plenxo_id")
                         ?: userSnap.getString("px_id")
@@ -227,8 +219,7 @@ class AuthRepositoryImpl : AuthRepository {
                         Log.w("AuthRepositoryImpl", "Failed to save profile locally: ${e.message}")
                     }
                 } else {
-                    // IF IT DOES NOT EXIST (New Sign-Up / First Time User without document):
-                    // ONLY THEN generate a new Plenxo ID and create a new document in Firestore.
+                    // IF IT DOES NOT EXIST (New Sign-Up): ONLY THEN generate a new Plenxo ID and create document
                     val generatedPlenxoId = com.example.model.resolveOrCreatePlenxoId(userId, firestore)
                     val numericCode = generatedPlenxoId.removePrefix("PX-")
                     val initialData = mapOf(
@@ -246,7 +237,6 @@ class AuthRepositoryImpl : AuthRepository {
                         "createdAt" to System.currentTimeMillis()
                     )
                     userDocRef.set(initialData, com.google.firebase.firestore.SetOptions.merge()).await()
-                    userDataDocRef.set(initialData, com.google.firebase.firestore.SetOptions.merge()).await()
                 }
             } catch (e: Exception) {
                 Log.e("AuthRepositoryImpl", "Check before write error on login: ${e.message}", e)
@@ -269,7 +259,7 @@ class AuthRepositoryImpl : AuthRepository {
 
     override suspend fun getLoginCount(email: String): Int = withContext(Dispatchers.IO) {
         return@withContext try {
-            val querySnapshot = firestore.collection("users_data")
+            val querySnapshot = firestore.collection("users")
                 .whereEqualTo("email", email.trim())
                 .limit(1)
                 .get()
@@ -282,7 +272,7 @@ class AuthRepositoryImpl : AuthRepository {
                 0
             }
         } catch (e: Exception) {
-            Log.w("AuthRepositoryImpl", "Could not query users_data login count: ${e.message}. Assuming 0.")
+            Log.w("AuthRepositoryImpl", "Could not query users login count: ${e.message}. Assuming 0.")
             0
         }
     }
@@ -293,7 +283,7 @@ class AuthRepositoryImpl : AuthRepository {
                 "login_count" to currentCount + 1,
                 "email" to email.trim()
             )
-            firestore.collection("users_data").document(userId)
+            firestore.collection("users").document(userId)
                 .set(updates, com.google.firebase.firestore.SetOptions.merge())
                 .await()
             Log.d("AuthRepositoryImpl", "Firestore: Incremented login_count to ${currentCount + 1}")
@@ -308,7 +298,7 @@ class AuthRepositoryImpl : AuthRepository {
                 "login_count" to 0,
                 "email" to email.trim()
             )
-            firestore.collection("users_data").document(userId)
+            firestore.collection("users").document(userId)
                 .set(updates, com.google.firebase.firestore.SetOptions.merge())
                 .await()
             Log.d("AuthRepositoryImpl", "Firestore: Reset login_count to 0 for user $userId")

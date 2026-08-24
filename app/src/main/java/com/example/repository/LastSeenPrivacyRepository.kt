@@ -36,10 +36,6 @@ class LastSeenPrivacyRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -60,7 +56,7 @@ class LastSeenPrivacyRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("LastSeenPrivacyRepo", "Error listening for last seen visibility: ${error.message}")
@@ -92,10 +88,6 @@ class LastSeenPrivacyRepository {
                 "lastActiveTimestamp" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -114,7 +106,7 @@ class LastSeenPrivacyRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(targetUserId)
+        val docRef = firestore.collection("users").document(targetUserId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("LastSeenPrivacyRepo", "Error observing target user last seen: ${error.message}")
@@ -161,7 +153,7 @@ class LastSeenPrivacyRepository {
     suspend fun fetchLastSeenVisibility(userId: String): String {
         if (userId.isEmpty()) return "EVERYONE"
         return try {
-            val doc = firestore.collection("users_data").document(userId).get().await()
+            val doc = firestore.collection("users").document(userId).get().await()
             doc.getString("lastSeenVisibility")
                 ?: doc.getString("lastSeenVisibilitySetting")
                 ?: "EVERYONE"

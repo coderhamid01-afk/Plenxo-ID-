@@ -35,10 +35,6 @@ class DisappearingMessagesRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -59,7 +55,7 @@ class DisappearingMessagesRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("DisappearingMessagesRepo", "Error observing disappearing timer: ${error.message}")
@@ -89,7 +85,7 @@ class DisappearingMessagesRepository {
         val uid = currentUserId
         if (uid.isEmpty()) return 0L
         return try {
-            val doc = firestore.collection("users_data").document(uid).get().await()
+            val doc = firestore.collection("users").document(uid).get().await()
             val timerVal = doc.get("disappearingTimerMs") ?: doc.get("defaultDisappearingDuration")
             when (timerVal) {
                 is Number -> timerVal.toLong()

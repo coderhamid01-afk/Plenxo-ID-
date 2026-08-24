@@ -59,7 +59,6 @@ class AccountDeletionRepositoryImpl : AccountDeletionRepository {
             try {
                 val fcmClearMap = mapOf("fcmToken" to FieldValue.delete())
                 firestore.collection("users").document(uid).update(fcmClearMap).await()
-                firestore.collection("users_data").document(uid).update(fcmClearMap).await()
             } catch (ex: Throwable) {
                 Log.w("AccountDeletionRepo", "FCM token field clear warning: ${ex.message}")
             }
@@ -76,10 +75,10 @@ class AccountDeletionRepositoryImpl : AccountDeletionRepository {
 
             // STEP 4: Firestore Records Erase
             try {
-                val subcollections = listOf("friends", "settings", "keys", "blocked_list", "security_keys")
+                val subcollections = listOf("friends", "settings", "keys", "blocked_list", "security_keys", "archived_keys")
                 for (sub in subcollections) {
                     try {
-                        val docs = firestore.collection("users_data").document(uid).collection(sub).get().await()
+                        val docs = firestore.collection("users").document(uid).collection(sub).get().await()
                         if (!docs.isEmpty) {
                             val batch = firestore.batch()
                             for (doc in docs.documents) {
@@ -94,7 +93,6 @@ class AccountDeletionRepositoryImpl : AccountDeletionRepository {
 
                 // Delete primary user documents
                 val mainBatch = firestore.batch()
-                mainBatch.delete(firestore.collection("users_data").document(uid))
                 mainBatch.delete(firestore.collection("users").document(uid))
                 mainBatch.delete(firestore.collection("status").document(uid))
                 mainBatch.commit().await()

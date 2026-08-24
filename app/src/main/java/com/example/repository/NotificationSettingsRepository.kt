@@ -49,10 +49,6 @@ class NotificationSettingsRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -77,7 +73,7 @@ class NotificationSettingsRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("NotificationSettingsRepo", "Error listening for notification preferences: ${error.message}")
@@ -118,10 +114,6 @@ class NotificationSettingsRepository {
                     "lastTokenUpdate" to FieldValue.serverTimestamp()
                 )
 
-                firestore.collection("users_data").document(uid)
-                    .set(tokenData, SetOptions.merge())
-                    .await()
-
                 firestore.collection("users").document(uid)
                     .set(tokenData, SetOptions.merge())
                     .await()
@@ -140,7 +132,7 @@ class NotificationSettingsRepository {
             fcm.subscribeToTopic(topicName).await()
             val uid = currentUserId
             if (uid.isNotEmpty()) {
-                firestore.collection("users_data").document(uid)
+                firestore.collection("users").document(uid)
                     .update("subscribedTopics", FieldValue.arrayUnion(topicName))
                     .await()
             }
@@ -157,7 +149,7 @@ class NotificationSettingsRepository {
             fcm.unsubscribeFromTopic(topicName).await()
             val uid = currentUserId
             if (uid.isNotEmpty()) {
-                firestore.collection("users_data").document(uid)
+                firestore.collection("users").document(uid)
                     .update("subscribedTopics", FieldValue.arrayRemove(topicName))
                     .await()
             }
@@ -174,7 +166,7 @@ class NotificationSettingsRepository {
         if (uid.isEmpty()) return NotificationPreferences()
 
         return try {
-            val doc = firestore.collection("users_data").document(uid).get().await()
+            val doc = firestore.collection("users").document(uid).get().await()
             val prefs = if (doc.exists()) {
                 NotificationPreferences(
                     notificationsEnabled = doc.getBoolean("notificationsEnabled") ?: true,

@@ -81,7 +81,7 @@ suspend fun generateUniqueNumericPlenxoId(
  * 1. Reads from Firestore default without artificial early timeouts (with 1 retry on error).
  * 2. Normalizes any valid existing ID (`PX-XXXXXX` or bare `XXXXXX`) and NEVER regenerates if found.
  * 3. Only generates a new ID if document read succeeds and field is genuinely absent.
- * 4. Atomically persists the resolved ID across both `users` and `users_data` collections via batched write.
+ * 4. Atomically persists the resolved ID in the `users` collection.
  */
 suspend fun resolveOrCreatePlenxoId(
     uid: String,
@@ -89,52 +89,64 @@ suspend fun resolveOrCreatePlenxoId(
 ): String {
     require(uid.isNotBlank()) { "User UID cannot be blank when resolving Plenxo ID." }
 
+    // Guard 1: Check SessionManager local cache first
+    try {
+        val appCtx = com.example.PlenxoApplication.instance
+        val localPxId = com.example.util.SessionManager.getLocalPlenxoId(appCtx)
+        if (localPxId.isNotBlank()) {
+            val normalizedLocal = when {
+                localPxId.matches(Regex("^PX-\\d{6}$")) -> localPxId
+                localPxId.matches(Regex("^\\d{6}$")) -> "PX-$localPxId"
+                localPxId.startsWith("PX-") -> localPxId
+                else -> null
+            }
+            if (normalizedLocal != null) {
+                Log.d("PlenxoIdResolver", "Plenxo ID found in SessionManager: $normalizedLocal for UID: $uid")
+                return normalizedLocal
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("PlenxoIdResolver", "SessionManager check error: ${e.message}")
+    }
+
     val userDocRef = firestore.collection("users").document(uid)
-    val userDataDocRef = firestore.collection("users_data").document(uid)
 
     var existingPxId: String? = null
     var readSuccessful = false
 
-    // 1. Try reading from Firestore (DEFAULT - SERVER/CACHE)
-    for (attempt in 1..2) {
+    // Guard 2: Await Firestore read on single 'users' collection
+    for (attempt in 1..3) {
         try {
             val userSnap = userDocRef.get().await()
-            val userDataSnap = userDataDocRef.get().await()
-
-            existingPxId = userSnap.getString("plenxoId")
-                ?: userSnap.getString("plenxo_id")
-                ?: userDataSnap.getString("plenxoId")
-                ?: userDataSnap.getString("plenxo_id")
-                ?: userSnap.getString("userCode")
-                ?: userDataSnap.getString("userCode")
-                ?: userSnap.getString("px_id")
-                ?: userDataSnap.getString("px_id")
-
-            readSuccessful = true
-            break
-        } catch (e: Exception) {
-            Log.w("PlenxoIdResolver", "Attempt $attempt failed reading Plenxo ID from DEFAULT source for $uid: ${e.message}")
-            // Fall back to local CACHE source if offline
-            try {
-                val userSnapCache = userDocRef.get(com.google.firebase.firestore.Source.CACHE).await()
-                val userDataSnapCache = userDataDocRef.get(com.google.firebase.firestore.Source.CACHE).await()
-                existingPxId = userSnapCache.getString("plenxoId")
-                    ?: userSnapCache.getString("plenxo_id")
-                    ?: userDataSnapCache.getString("plenxoId")
-                    ?: userDataSnapCache.getString("plenxo_id")
-                    ?: userSnapCache.getString("userCode")
-                    ?: userDataSnapCache.getString("userCode")
-                    ?: userSnapCache.getString("px_id")
-                    ?: userDataSnapCache.getString("px_id")
-
+            if (userSnap.exists()) {
+                existingPxId = userSnap.getString("plenxoId")
+                    ?: userSnap.getString("plenxo_id")
+                    ?: userSnap.getString("userCode")
+                    ?: userSnap.getString("px_id")
                 readSuccessful = true
                 break
+            } else {
+                readSuccessful = true
+                break
+            }
+        } catch (e: Exception) {
+            Log.w("PlenxoIdResolver", "Attempt $attempt failed reading Plenxo ID from users collection for $uid: ${e.message}")
+            try {
+                val userSnapCache = userDocRef.get(com.google.firebase.firestore.Source.CACHE).await()
+                if (userSnapCache.exists()) {
+                    existingPxId = userSnapCache.getString("plenxoId")
+                        ?: userSnapCache.getString("plenxo_id")
+                        ?: userSnapCache.getString("userCode")
+                        ?: userSnapCache.getString("px_id")
+                    readSuccessful = true
+                    break
+                }
             } catch (cacheEx: Exception) {
-                Log.w("PlenxoIdResolver", "Cache fallback read also failed for $uid: ${cacheEx.message}")
+                Log.w("PlenxoIdResolver", "Cache fallback read failed for $uid: ${cacheEx.message}")
             }
 
-            if (attempt < 2) {
-                kotlinx.coroutines.delay(300)
+            if (attempt < 3) {
+                kotlinx.coroutines.delay(200)
             }
         }
     }
@@ -159,41 +171,26 @@ suspend fun resolveOrCreatePlenxoId(
             "user_code" to numericCode
         )
         try {
-            val batch = firestore.batch()
-            batch.set(userDocRef, updateMap, com.google.firebase.firestore.SetOptions.merge())
-            batch.set(userDataDocRef, updateMap, com.google.firebase.firestore.SetOptions.merge())
-            batch.commit()
-            
-            val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-            val rdbMap = hashMapOf<String, Any>(
-                "plenxo_id" to normalized,
-                "plenxoId" to normalized,
-                "user_code" to numericCode,
-                "userCode" to numericCode
-            )
-            rdbRef.updateChildren(rdbMap)
+            userDocRef.set(updateMap, com.google.firebase.firestore.SetOptions.merge()).await()
+            val appCtx = com.example.PlenxoApplication.instance
+            com.example.util.SessionManager.saveUserProfileLocally(appCtx, plenxoId = normalized, displayName = "", bio = "", profilePicUrl = "")
         } catch (e: Exception) {
             Log.w("PlenxoIdResolver", "Warning: Failed to sync normalized Plenxo ID $normalized: ${e.message}")
         }
         return normalized
     }
 
-    // Deterministic fallback code derived from UID hash (100000..999999) if offline/unread
+    // Only if document read completed and confirmed NO ID EXISTS for a brand new user, generate one
     val deterministicCode = (kotlin.math.abs(uid.hashCode()) % 900000 + 100000).toString()
     val fallbackPxId = "PX-$deterministicCode"
 
-    val newPlenxoId = if (readSuccessful) {
-        try {
-            generateUniqueNumericPlenxoId(firestore)
-        } catch (e: Exception) {
-            fallbackPxId
-        }
-    } else {
+    val newPlenxoId = try {
+        generateUniqueNumericPlenxoId(firestore)
+    } catch (e: Exception) {
         fallbackPxId
     }
 
     val numericCode = newPlenxoId.removePrefix("PX-")
-
     val newMap = mapOf(
         "plenxoId" to newPlenxoId,
         "plenxo_id" to newPlenxoId,
@@ -203,21 +200,11 @@ suspend fun resolveOrCreatePlenxoId(
     )
 
     try {
-        val batch = firestore.batch()
-        batch.set(userDocRef, newMap, com.google.firebase.firestore.SetOptions.merge())
-        batch.set(userDataDocRef, newMap, com.google.firebase.firestore.SetOptions.merge())
-        batch.commit()
-
-        val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-        val rdbMap = hashMapOf<String, Any>(
-            "plenxo_id" to newPlenxoId,
-            "plenxoId" to newPlenxoId,
-            "user_code" to numericCode,
-            "userCode" to numericCode
-        )
-        rdbRef.updateChildren(rdbMap)
+        userDocRef.set(newMap, com.google.firebase.firestore.SetOptions.merge()).await()
+        val appCtx = com.example.PlenxoApplication.instance
+        com.example.util.SessionManager.saveUserProfileLocally(appCtx, plenxoId = newPlenxoId, displayName = "", bio = "", profilePicUrl = "")
     } catch (e: Exception) {
-        Log.w("PlenxoIdResolver", "Warning: Failed batch write for new ID $newPlenxoId: ${e.message}")
+        Log.w("PlenxoIdResolver", "Warning: Failed write for new ID $newPlenxoId: ${e.message}")
     }
 
     Log.d("PlenxoIdResolver", "Resolved/created permanent Plenxo ID: $newPlenxoId for UID: $uid (readSuccessful=$readSuccessful)")

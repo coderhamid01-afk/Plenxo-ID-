@@ -248,10 +248,7 @@ class SecurityRepository(private val context: Context) {
                     "lastSecurityViolationReason" to FieldValue.delete()
                 )
                 runCatching {
-                    val batch = firestore.batch()
-                    batch.set(firestore.collection("users").document(uid), resetMap, SetOptions.merge())
-                    batch.set(firestore.collection("users_data").document(uid), resetMap, SetOptions.merge())
-                    batch.commit().await()
+                    firestore.collection("users").document(uid).set(resetMap, SetOptions.merge()).await()
                 }
 
                 UserSecurityModel(
@@ -282,7 +279,7 @@ class SecurityRepository(private val context: Context) {
     }
 
     /**
-     * Atomic 24-hour lockdown trigger across `users/{uid}` and `users_data/{uid}`.
+     * Atomic 24-hour lockdown trigger across `users/{uid}`.
      * Signs out local Firebase session immediately.
      */
     suspend fun trigger24HourLockdown(targetUid: String, violationReason: String): UserSecurityModel = withContext(Dispatchers.IO) {
@@ -294,12 +291,7 @@ class SecurityRepository(private val context: Context) {
         )
 
         runCatching {
-            val userRef = firestore.collection("users").document(targetUid)
-            val userDataRef = firestore.collection("users_data").document(targetUid)
-            val batch = firestore.batch()
-            batch.set(userRef, lockData, SetOptions.merge())
-            batch.set(userDataRef, lockData, SetOptions.merge())
-            batch.commit().await()
+            firestore.collection("users").document(targetUid).set(lockData, SetOptions.merge()).await()
         }.onFailure { e ->
             Log.e("SecurityRepository", "Failed to write 24-hour lockdown to Firestore for $targetUid: ${e.message}")
         }

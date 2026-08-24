@@ -18,8 +18,6 @@ class PlenxoMessagingService : FirebaseMessagingService() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         
         val db = FirebaseFirestore.getInstance()
-        db.collection("users_data").document(uid)
-            .set(mapOf("fcmToken" to token), SetOptions.merge())
         db.collection("users").document(uid)
             .set(mapOf("fcmToken" to token), SetOptions.merge())
     }

@@ -301,7 +301,6 @@ open class PlenxoFCMService : FirebaseMessagingService() {
                     "updatedAt" to System.currentTimeMillis()
                 )
                 firestore.collection("users").document(uid).set(firestoreMap, SetOptions.merge())
-                firestore.collection("users_data").document(uid).set(firestoreMap, SetOptions.merge())
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to update FCM token in Firestore: ${e.message}")
             }

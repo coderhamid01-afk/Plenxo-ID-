@@ -61,10 +61,6 @@ class AutoDownloadPreferencesRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -90,10 +86,6 @@ class AutoDownloadPreferencesRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -114,7 +106,7 @@ class AutoDownloadPreferencesRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("AutoDownloadRepo", "Error listening for auto-download settings: ${error.message}")
@@ -152,7 +144,7 @@ class AutoDownloadPreferencesRepository {
         if (uid.isEmpty()) return GlobalAutoDownloadSettings()
 
         return try {
-            val doc = firestore.collection("users_data").document(uid).get().await()
+            val doc = firestore.collection("users").document(uid).get().await()
             if (!doc.exists()) return GlobalAutoDownloadSettings()
 
             val globalStr = doc.getString("autoDownloadMode") ?: doc.getString("globalAutoDownload") ?: "WIFI_ONLY"

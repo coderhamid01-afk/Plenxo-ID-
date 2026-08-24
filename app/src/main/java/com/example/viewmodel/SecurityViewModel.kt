@@ -140,7 +140,6 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 try {
-                    firestore.collection("users_data").document(uid).delete().await()
                     firestore.collection("users").document(uid).delete().await()
                     firestore.collection("status").document(uid).delete().await()
                 } catch (ex: Exception) {
@@ -172,7 +171,7 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
         SessionManager.savePhotoVis(getApplication(), visibility)
         viewModelScope.launch {
             try {
-                firestore.collection("users_data").document(uid)
+                firestore.collection("users").document(uid)
                     .update("profilePhotoVisibility", visibility)
             } catch (e: Exception) {
                 Log.e("SecurityVM", "Failed to sync photo visibility", e)
@@ -189,7 +188,7 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             try {
-                firestore.collection("users_data").document(uid)
+                firestore.collection("users").document(uid)
                     .update("aboutVisibility", visibility)
             } catch (e: Exception) {
                 Log.e("SecurityVM", "Failed to sync about visibility", e)
@@ -204,7 +203,7 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
         SessionManager.saveDisappearingTimer(getApplication(), durationMs)
         viewModelScope.launch {
             try {
-                firestore.collection("users_data").document(uid)
+                firestore.collection("users").document(uid)
                     .update("disappearingTimer", durationMs)
             } catch (e: Exception) {
                 Log.e("SecurityVM", "Failed to sync disappearing messages timer", e)
@@ -228,7 +227,7 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
                 for (bUid in blockedUids) {
                     if (bUid.isEmpty()) continue
                     try {
-                        val doc = firestore.collection("users_data").document(bUid).get().await()
+                        val doc = firestore.collection("users").document(bUid).get().await()
                         val user = doc.toObject(UserProfile::class.java)
                         val displayName = user?.displayName ?: "User ($bUid)"
                         resolvedList.add(bUid to displayName)
@@ -261,7 +260,7 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                val targetDoc = firestore.collection("users_data").document(targetUid).get().await()
+                val targetDoc = firestore.collection("users").document(targetUid).get().await()
                 if (!targetDoc.exists()) {
                     onFailure("User ID does not exist.")
                     _isLoading.value = false

@@ -31,7 +31,7 @@ class UserBlockingRepository {
         return try {
             val batch = firestore.batch()
 
-            val currentUserRef = firestore.collection("users_data").document(uid)
+            val currentUserRef = firestore.collection("users").document(uid)
             batch.set(
                 currentUserRef,
                 mapOf(
@@ -41,7 +41,7 @@ class UserBlockingRepository {
                 SetOptions.merge()
             )
 
-            val blockedEntryRef = firestore.collection("users_data")
+            val blockedEntryRef = firestore.collection("users")
                 .document(uid)
                 .collection("blocked_list")
                 .document(targetUserId)
@@ -73,7 +73,7 @@ class UserBlockingRepository {
         return try {
             val batch = firestore.batch()
 
-            val currentUserRef = firestore.collection("users_data").document(uid)
+            val currentUserRef = firestore.collection("users").document(uid)
             batch.set(
                 currentUserRef,
                 mapOf(
@@ -83,7 +83,7 @@ class UserBlockingRepository {
                 SetOptions.merge()
             )
 
-            val blockedEntryRef = firestore.collection("users_data")
+            val blockedEntryRef = firestore.collection("users")
                 .document(uid)
                 .collection("blocked_list")
                 .document(targetUserId)
@@ -107,7 +107,7 @@ class UserBlockingRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("UserBlockingRepo", "Error observing blocked users list: ${error.message}")
@@ -135,7 +135,7 @@ class UserBlockingRepository {
         if (uid.isEmpty() || targetUserId.isEmpty()) return false
 
         return try {
-            val doc = firestore.collection("users_data").document(uid).get().await()
+            val doc = firestore.collection("users").document(uid).get().await()
             @Suppress("UNCHECKED_CAST")
             val blockedList = (doc.get("blockedUsers") as? List<String>) ?: emptyList()
             blockedList.contains(targetUserId)
@@ -153,7 +153,7 @@ class UserBlockingRepository {
         if (IBlockedTarget) return false
 
         return try {
-            val targetDoc = firestore.collection("users_data").document(targetUserId).get().await()
+            val targetDoc = firestore.collection("users").document(targetUserId).get().await()
             @Suppress("UNCHECKED_CAST")
             val targetBlockedList = (targetDoc.get("blockedUsers") as? List<String>) ?: emptyList()
             !targetBlockedList.contains(uid)

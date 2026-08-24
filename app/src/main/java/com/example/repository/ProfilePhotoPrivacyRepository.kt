@@ -36,10 +36,6 @@ class ProfilePhotoPrivacyRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -60,7 +56,7 @@ class ProfilePhotoPrivacyRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("ProfilePhotoPrivacyRepo", "Error listening for profile photo visibility: ${error.message}")
@@ -87,7 +83,7 @@ class ProfilePhotoPrivacyRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(targetUserId)
+        val docRef = firestore.collection("users").document(targetUserId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("ProfilePhotoPrivacyRepo", "Error observing target user profile photo: ${error.message}")
@@ -132,7 +128,7 @@ class ProfilePhotoPrivacyRepository {
     suspend fun fetchProfilePhotoVisibility(userId: String): String {
         if (userId.isEmpty()) return "EVERYONE"
         return try {
-            val doc = firestore.collection("users_data").document(userId).get().await()
+            val doc = firestore.collection("users").document(userId).get().await()
             doc.getString("profilePhotoVisibility")
                 ?: doc.getString("profilePicVisibility")
                 ?: "EVERYONE"

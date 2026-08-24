@@ -60,11 +60,8 @@ class FriendRequestRepositoryImpl : FriendRequestRepository {
                 return true
             }
 
-            // Fetch sender details from users or users_data to populate metadata
-            var senderDoc = firestore.collection("users_data").document(uid).get().await()
-            if (!senderDoc.exists()) {
-                senderDoc = firestore.collection("users").document(uid).get().await()
-            }
+            // Fetch sender details from users collection to populate metadata
+            val senderDoc = firestore.collection("users").document(uid).get().await()
             val senderName = senderDoc.getString("displayName")
                 ?: auth.currentUser?.displayName
                 ?: "User"
@@ -142,12 +139,12 @@ class FriendRequestRepositoryImpl : FriendRequestRepository {
             ))
 
             // 2. Add target sender user to current user's friends subcollection
-            val currentUserFriendRef = firestore.collection("users_data")
+            val currentUserFriendRef = firestore.collection("users")
                 .document(uid)
                 .collection("friends")
                 .document(senderUid)
 
-            val senderDoc = firestore.collection("users_data").document(senderUid).get().await()
+            val senderDoc = firestore.collection("users").document(senderUid).get().await()
             val senderData = mapOf(
                 "friendUid" to senderUid,
                 "addedAt" to FieldValue.serverTimestamp(),
@@ -157,12 +154,12 @@ class FriendRequestRepositoryImpl : FriendRequestRepository {
             batch.set(currentUserFriendRef, senderData, SetOptions.merge())
 
             // 3. Add current user to target sender's friends subcollection
-            val senderFriendRef = firestore.collection("users_data")
+            val senderFriendRef = firestore.collection("users")
                 .document(senderUid)
                 .collection("friends")
                 .document(uid)
 
-            val currentDoc = firestore.collection("users_data").document(uid).get().await()
+            val currentDoc = firestore.collection("users").document(uid).get().await()
             val currentUserData = mapOf(
                 "friendUid" to uid,
                 "addedAt" to FieldValue.serverTimestamp(),

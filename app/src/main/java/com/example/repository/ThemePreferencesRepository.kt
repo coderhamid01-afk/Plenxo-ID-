@@ -52,10 +52,6 @@ class ThemePreferencesRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -76,7 +72,7 @@ class ThemePreferencesRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("ThemePreferencesRepo", "Error observing theme preference: ${error.message}")
@@ -101,7 +97,7 @@ class ThemePreferencesRepository {
         if (uid.isEmpty()) return AppThemeMode.SYSTEM
 
         return try {
-            val doc = firestore.collection("users_data").document(uid).get().await()
+            val doc = firestore.collection("users").document(uid).get().await()
             val themeStr = doc.getString("themeMode")
                 ?: doc.getString("appTheme")
                 ?: "SYSTEM"

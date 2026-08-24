@@ -184,8 +184,6 @@ fun ProfileSettingsScreen(
                             "photoUrl" to uploadedUrl,
                             "profileUrl" to uploadedUrl
                         )
-                        fs.collection("users_data").document(uid)
-                            .set(map, com.google.firebase.firestore.SetOptions.merge())
                         fs.collection("users").document(uid)
                             .set(map, com.google.firebase.firestore.SetOptions.merge())
                     }

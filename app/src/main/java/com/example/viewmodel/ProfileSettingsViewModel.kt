@@ -181,10 +181,6 @@ class ProfileSettingsViewModel(application: Application) : AndroidViewModel(appl
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
 
-                    firestore.collection("users_data").document(resolvedUid)
-                        .set(profileData, SetOptions.merge())
-                        .await()
-
                     firestore.collection("users").document(resolvedUid)
                         .set(profileData, SetOptions.merge())
                         .await()

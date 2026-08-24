@@ -61,11 +61,7 @@ class UserRepositoryImpl : UserRepository {
 
         // Check if user document already exists before attempting creation
         val userDocRef = firestore.collection("users").document(uid)
-        val userDataDocRef = firestore.collection("users_data").document(uid)
-        var existingSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
-        if (existingSnap == null || !existingSnap.exists()) {
-            existingSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
-        }
+        val existingSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
 
         if (existingSnap != null && existingSnap.exists()) {
             Log.d("UserRepositoryImpl", "User $uid already exists in Firestore. Preserving existing profile.")
@@ -95,7 +91,6 @@ class UserRepositoryImpl : UserRepository {
 
         return try {
             userDocRef.set(userData, SetOptions.merge()).await()
-            userDataDocRef.set(userData, SetOptions.merge()).await()
             Log.d("UserRepositoryImpl", "User profile created successfully for $uid with PX ID: $finalPxId")
             true
         } catch (e: Exception) {
@@ -115,12 +110,7 @@ class UserRepositoryImpl : UserRepository {
         if (uid.isBlank()) return false
 
         val userDocRef = firestore.collection("users").document(uid)
-        val userDataDocRef = firestore.collection("users_data").document(uid)
-
-        var userSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
-        if (userSnap == null || !userSnap.exists()) {
-            userSnap = try { userDataDocRef.get().await() } catch (e: Exception) { null }
-        }
+        val userSnap = try { userDocRef.get().await() } catch (e: Exception) { null }
 
         if (userSnap != null && userSnap.exists()) {
             Log.d("UserRepositoryImpl", "Returning user $uid already exists. Skipping profile overwrite during auth sync.")
@@ -133,7 +123,6 @@ class UserRepositoryImpl : UserRepository {
                     updates["fcmToken"] = fcmToken
                 }
                 userDocRef.update(updates).await()
-                userDataDocRef.update(updates).await()
             } catch (e: Exception) {
                 Log.w("UserRepositoryImpl", "Non-profile update warning: ${e.message}")
             }
@@ -149,10 +138,6 @@ class UserRepositoryImpl : UserRepository {
         mutableUpdates["updatedAt"] = FieldValue.serverTimestamp()
 
         return try {
-            firestore.collection("users_data").document(uid)
-                .set(mutableUpdates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(mutableUpdates, SetOptions.merge())
                 .await()
@@ -191,7 +176,7 @@ class UserRepositoryImpl : UserRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("UserRepositoryImpl", "Error observing user data: ${error.message}")
@@ -212,7 +197,7 @@ class UserRepositoryImpl : UserRepository {
     override suspend fun getUserData(uid: String): Map<String, Any>? {
         if (uid.isBlank()) return null
         return try {
-            val snapshot = firestore.collection("users_data").document(uid).get().await()
+            val snapshot = firestore.collection("users").document(uid).get().await()
             if (snapshot.exists()) snapshot.data else null
         } catch (e: Exception) {
             Log.e("UserRepositoryImpl", "Failed to fetch user data for $uid: ${e.message}")
@@ -262,24 +247,6 @@ class UserRepositoryImpl : UserRepository {
             if (snapshot.isEmpty) {
                 snapshot = firestore.collection("users")
                     .whereEqualTo("plenxoId", cleanInput)
-                    .get()
-                    .await()
-            }
-            if (snapshot.isEmpty) {
-                snapshot = firestore.collection("users_data")
-                    .whereEqualTo("plenxoId", formatted)
-                    .get()
-                    .await()
-            }
-            if (snapshot.isEmpty) {
-                snapshot = firestore.collection("users_data")
-                    .whereEqualTo("plenxo_id", formatted)
-                    .get()
-                    .await()
-            }
-            if (snapshot.isEmpty) {
-                snapshot = firestore.collection("users_data")
-                    .whereEqualTo("userCode", numericPart)
                     .get()
                     .await()
             }

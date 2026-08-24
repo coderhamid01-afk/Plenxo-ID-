@@ -35,10 +35,6 @@ class ReadReceiptsRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(updates, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(updates, SetOptions.merge())
                 .await()
@@ -59,7 +55,7 @@ class ReadReceiptsRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(uid)
+        val docRef = firestore.collection("users").document(uid)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("ReadReceiptsRepo", "Error listening for read receipts setting: ${error.message}")
@@ -82,7 +78,7 @@ class ReadReceiptsRepository {
     suspend fun isReadReceiptsEnabled(userId: String): Boolean {
         if (userId.isEmpty()) return true
         return try {
-            val doc = firestore.collection("users_data").document(userId).get().await()
+            val doc = firestore.collection("users").document(userId).get().await()
             doc.getBoolean("readReceiptsEnabled")
                 ?: doc.getBoolean("read_receipts_enabled")
                 ?: true

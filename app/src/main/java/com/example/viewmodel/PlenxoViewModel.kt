@@ -391,8 +391,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             "photoUrl" to url,
                             "updatedAt" to System.currentTimeMillis()
                         )
-                        firestore.collection("users_data").document(currentUid)
-                            .set(updates, com.google.firebase.firestore.SetOptions.merge())
                         firestore.collection("users").document(currentUid)
                             .set(updates, com.google.firebase.firestore.SetOptions.merge())
 
@@ -473,21 +471,12 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     "isProfileCompleted" to true
                 )
 
-                // Save directly to Firestore under users_data and users with timeout guard
+                // Save directly to Firestore under users collection with timeout guard
                 kotlinx.coroutines.withTimeoutOrNull(8000L) {
-                    firestore.collection("users_data")
+                    firestore.collection("users")
                         .document(currentUid)
                         .set(profileMap, com.google.firebase.firestore.SetOptions.merge())
                         .await()
-
-                    try {
-                        firestore.collection("users")
-                            .document(currentUid)
-                            .set(profileMap, com.google.firebase.firestore.SetOptions.merge())
-                            .await()
-                    } catch (e: Exception) {
-                        Log.w("Plenxo", "Users collection set warning: ${e.message}")
-                    }
                 }
 
                 _currentScreen.value = PlenxoScreen.HOME
@@ -636,21 +625,21 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Search users_data by plenxoId, plenxo_id, userCode, or document ID
-                val querySnapshot = firestore.collection("users_data")
+                // Search users by plenxoId, plenxo_id, userCode, or document ID
+                val querySnapshot = firestore.collection("users")
                     .whereEqualTo("plenxoId", cleanId)
                     .get().await()
 
                 val doc = if (!querySnapshot.isEmpty) {
                     querySnapshot.documents.first()
                 } else {
-                    val queryAlt = firestore.collection("users_data")
+                    val queryAlt = firestore.collection("users")
                         .whereEqualTo("userCode", cleanId)
                         .get().await()
                     if (!queryAlt.isEmpty) {
                         queryAlt.documents.first()
                     } else {
-                        firestore.collection("users_data").document(cleanId).get().await()
+                        firestore.collection("users").document(cleanId).get().await()
                     }
                 }
 
@@ -1255,7 +1244,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             }
             try {
                 if (currentUserId.isNotEmpty()) {
-                    firestore.collection("users_data").document(currentUserId)
+                    firestore.collection("users").document(currentUserId)
                         .set(mapOf("lastSeenVisibility" to visibility), com.google.firebase.firestore.SetOptions.merge())
                         .await()
                 }
@@ -1276,7 +1265,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             }
             try {
                 if (currentUserId.isNotEmpty()) {
-                    firestore.collection("users_data").document(currentUserId)
+                    firestore.collection("users").document(currentUserId)
                         .set(mapOf("profilePhotoVisibility" to visibility), com.google.firebase.firestore.SetOptions.merge())
                         .await()
                 }
@@ -1301,9 +1290,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         "bioVisibility" to visibility,
                         "isBioPublic" to (visibility.equals("EVERYONE", ignoreCase = true) || visibility.equals("PUBLIC", ignoreCase = true))
                     )
-                    firestore.collection("users_data").document(currentUserId)
-                        .set(updates, com.google.firebase.firestore.SetOptions.merge())
-                        .await()
                     firestore.collection("users").document(currentUserId)
                         .set(updates, com.google.firebase.firestore.SetOptions.merge())
                         .await()
@@ -1325,7 +1311,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             }
             try {
                 if (currentUserId.isNotEmpty()) {
-                    firestore.collection("users_data").document(currentUserId)
+                    firestore.collection("users").document(currentUserId)
                         .set(mapOf("readReceiptsEnabled" to enabled), com.google.firebase.firestore.SetOptions.merge())
                         .await()
                 }
@@ -1346,7 +1332,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             }
             try {
                 if (currentUserId.isNotEmpty()) {
-                    firestore.collection("users_data").document(currentUserId)
+                    firestore.collection("users").document(currentUserId)
                         .set(mapOf("about" to text), com.google.firebase.firestore.SetOptions.merge())
                         .await()
                 }
@@ -1367,26 +1353,39 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     try {
                         val uid = fbUser.uid
                         val userDoc = firestore.collection("users").document(uid).get().await()
-                        val userDataDoc = if (!userDoc.exists()) firestore.collection("users_data").document(uid).get().await() else null
                         
-                        val docToUse = if (userDoc.exists()) userDoc else userDataDoc
-                        val isEmailVerified = docToUse?.getBoolean("isEmailVerified") == true || 
-                                              docToUse?.getBoolean("emailVerified") == true || 
-                                              docToUse?.getBoolean("is_email_verified") == true
-                        val isSetupCompleted = docToUse?.getBoolean("isProfileSetupCompleted") == true ||
-                                               docToUse?.getBoolean("isProfileSetup") == true || 
-                                               docToUse?.getBoolean("profileSetupCompleted") == true ||
-                                               docToUse?.getBoolean("is_profile_completed") == true ||
-                                               docToUse?.getBoolean("isProfileCompleted") == true
+                        val docToUse = userDoc
+                        val isEmailVerified = docToUse.getBoolean("isEmailVerified") == true || 
+                                              docToUse.getBoolean("emailVerified") == true || 
+                                              docToUse.getBoolean("is_email_verified") == true
+                        val isSetupCompleted = docToUse.getBoolean("isProfileSetupCompleted") == true ||
+                                               docToUse.getBoolean("isProfileSetup") == true || 
+                                               docToUse.getBoolean("profileSetupCompleted") == true ||
+                                               docToUse.getBoolean("is_profile_completed") == true ||
+                                               docToUse.getBoolean("isProfileCompleted") == true
 
                         withContext(Dispatchers.Main) {
                             if (docToUse != null && docToUse.exists()) {
                                 val fetchedName = docToUse.getString("displayName") ?: docToUse.getString("name") ?: ""
-                                val fetchedCode = docToUse.getString("userCode") ?: docToUse.getString("plenxoId") ?: ""
+                                val fetchedCode = docToUse.getString("plenxoId") 
+                                    ?: docToUse.getString("plenxo_id") 
+                                    ?: docToUse.getString("px_id") 
+                                    ?: docToUse.getString("userCode") 
+                                    ?: docToUse.getString("user_code") 
+                                    ?: ""
+                                val fetchedBio = docToUse.getString("bio") ?: docToUse.getString("statusMessage") ?: ""
+                                val fetchedPic = docToUse.getString("profilePicUrl") ?: docToUse.getString("avatar_url") ?: docToUse.getString("photoUrl") ?: ""
+                                val fetchedAge = docToUse.get("age")?.toString() ?: docToUse.getString("dateOfBirth") ?: ""
+
                                 if (fetchedName.isNotBlank()) displayName.value = fetchedName
+                                if (fetchedBio.isNotBlank()) aboutText.value = fetchedBio
+                                if (fetchedPic.isNotBlank()) galleryImageUriString.value = fetchedPic
+
                                 if (fetchedCode.isNotBlank()) {
-                                    userCode.value = fetchedCode
-                                    plenxoId.value = if (fetchedCode.startsWith("PX-")) fetchedCode else "PX-$fetchedCode"
+                                    val formatted = if (fetchedCode.startsWith("PX-")) fetchedCode else "PX-$fetchedCode"
+                                    plenxoId.value = formatted
+                                    revealedPlenxoId.value = formatted
+                                    userCode.value = formatted.removePrefix("PX-")
                                 }
                                 val is2FA = docToUse.getBoolean("is2FAEnabled") == true ||
                                             docToUse.getBoolean("is_2fa_enabled") == true ||
@@ -1397,10 +1396,19 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                     _storedMasterPinHash.value = pin
                                 }
 
+                                SessionManager.saveUserProfileLocally(
+                                    getApplication(),
+                                    plenxoId = plenxoId.value,
+                                    displayName = fetchedName,
+                                    bio = fetchedBio,
+                                    profilePicUrl = fetchedPic,
+                                    age = fetchedAge
+                                )
+
                                 if (!isEmailVerified) {
                                     _authState.value = AuthState.VERIFYING_OTP
                                     navigateToScreen(PlenxoScreen.OTP_VERIFICATION, addToHistory = false, clearHistory = true)
-                                } else if (!isSetupCompleted) {
+                                } else if (!isSetupCompleted && fetchedName.isBlank() && fetchedCode.isBlank()) {
                                     _authState.value = AuthState.NEEDS_PROFILE_SETUP
                                     navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
                                 } else {
@@ -1801,65 +1809,33 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         firestore.collection("users").document(uid)
             .collection("devices")
             .addSnapshotListener { snapshot, error ->
-                if (error == null && snapshot != null && !snapshot.isEmpty) {
-                    val list = snapshot.documents.mapNotNull { doc ->
-                        val devId = doc.getString("deviceId") ?: doc.id
-                        val devModel = doc.getString("deviceModel") ?: "Android Device"
-                        val devName = doc.getString("deviceName") ?: devModel
-                        val lastActive = doc.getLong("lastActiveTimestamp") ?: System.currentTimeMillis()
-                        val isCurr = devId == localSessionId || (doc.getBoolean("isCurrentDevice") == true)
-                        com.example.model.ActiveSession(
-                            sessionId = devId,
-                            deviceName = devName,
-                            deviceModel = devModel,
-                            operatingSystem = "Android",
-                            ipAddress = "127.0.0.1",
-                            timestamp = lastActive,
-                            lastActiveTime = lastActive,
-                            isCurrentDevice = isCurr
-                        )
-                    }
-                    activeSessions.value = list
+                if (error != null || snapshot == null) return@addSnapshotListener
+                val list = snapshot.documents.mapNotNull { doc ->
+                    val devId = doc.getString("deviceId") ?: doc.id
+                    val devModel = doc.getString("deviceModel") ?: "Android Device"
+                    val devName = doc.getString("deviceName") ?: devModel
+                    val lastActive = doc.getLong("lastActiveTimestamp") ?: System.currentTimeMillis()
+                    val isCurr = devId == localSessionId || (doc.getBoolean("isCurrentDevice") == true)
+                    com.example.model.ActiveSession(
+                        sessionId = devId,
+                        deviceName = devName,
+                        deviceModel = devModel,
+                        operatingSystem = "Android",
+                        ipAddress = "127.0.0.1",
+                        timestamp = lastActive,
+                        lastActiveTime = lastActive,
+                        isCurrentDevice = isCurr
+                    )
+                }
+                activeSessions.value = list
 
-                    // Check if current device is still in the active devices list. If not, trigger remote logout.
+                // Check if current device is still in the active devices list. If not, trigger remote logout.
+                if (list.isNotEmpty()) {
                     val isCurrentDeviceActive = list.any { it.sessionId == localSessionId }
                     if (!isCurrentDeviceActive && com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
                         Log.w("SessionAudit", "Current device session ($localSessionId) was remotely terminated. Force logout.")
                         logout()
                     }
-                } else {
-                    firestore.collection("users_data").document(uid)
-                        .collection("active_sessions")
-                        .addSnapshotListener { dataSnapshot, dataError ->
-                            if (dataError != null || dataSnapshot == null) return@addSnapshotListener
-                            val list = dataSnapshot.documents.mapNotNull { doc ->
-                                val sid = doc.getString("sessionId") ?: doc.id
-                                val devName = doc.getString("deviceName") ?: doc.getString("deviceModel") ?: "Android Device"
-                                val devModel = doc.getString("deviceModel") ?: "Android Device"
-                                val os = doc.getString("operatingSystem") ?: "Android"
-                                val ip = doc.getString("ipAddress") ?: "127.0.0.1"
-                                val ts = doc.getLong("timestamp") ?: System.currentTimeMillis()
-                                val lastActive = doc.getLong("lastActiveTimestamp") ?: doc.getLong("lastActiveTime") ?: ts
-                                com.example.model.ActiveSession(
-                                    sessionId = sid,
-                                    deviceName = devName,
-                                    deviceModel = devModel,
-                                    operatingSystem = os,
-                                    ipAddress = ip,
-                                    timestamp = ts,
-                                    lastActiveTime = lastActive,
-                                    isCurrentDevice = (sid == localSessionId)
-                                )
-                            }
-                            activeSessions.value = list
-
-                            // Check if current device is still in the active devices list. If not, trigger remote logout.
-                            val isCurrentDeviceActive = list.any { it.sessionId == localSessionId }
-                            if (!isCurrentDeviceActive && com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
-                                Log.w("SessionAudit", "Current device session ($localSessionId) was remotely terminated in backup list. Force logout.")
-                                logout()
-                            }
-                        }
                 }
             }
     }
@@ -1903,10 +1879,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     oldestDoc?.let { doc ->
                         Log.d("SessionAudit", "Removing oldest device document to enforce 3 device limit: ${doc.id}")
                         devicesRef.document(doc.id).delete().await()
-                        try {
-                            firestore.collection("users_data").document(uid)
-                                .collection("active_sessions").document(doc.id).delete().await()
-                        } catch (ignored: Exception) {}
                     }
                 }
 
@@ -1934,15 +1906,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     .set(deviceData, com.google.firebase.firestore.SetOptions.merge())
                     .await()
 
-                try {
-                    firestore.collection("users_data").document(uid)
-                        .collection("active_sessions").document(currentDeviceId)
-                        .set(deviceData, com.google.firebase.firestore.SetOptions.merge())
-                        .await()
-                } catch (e: Exception) {
-                    Log.w("SessionAudit", "Mirror to active_sessions note: ${e.message}")
-                }
-
                 observeActiveSessions()
             } catch (e: Exception) {
                 Log.e("Security", "Failed to audit session", e)
@@ -1957,10 +1920,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 firestore.collection("users").document(uid)
                     .collection("devices").document(sessionId)
-                    .delete()
-                    .await()
-                firestore.collection("users_data").document(uid)
-                    .collection("active_sessions").document(sessionId)
                     .delete()
                     .await()
             } catch (e: Exception) {
@@ -1979,7 +1938,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         "fcm_token" to com.google.firebase.firestore.FieldValue.delete()
                     )
                     firestore.collection("users").document(uid).update(fcmClearMap).await()
-                    firestore.collection("users_data").document(uid).update(fcmClearMap).await()
                 } catch (e: Exception) {
                     Log.w("PlenxoLogout", "Error clearing FCM token from Firestore: ${e.message}")
                 }
@@ -2499,26 +2457,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             }
 
                             if (foundEmailStr.isNullOrBlank()) {
-                                // Check users_data collection
-                                var snapData = firestore.collection("users_data")
-                                    .whereEqualTo("plenxoId", formattedPxId.uppercase())
-                                    .limit(1).get().await()
-                                if (snapData.isEmpty) {
-                                    snapData = firestore.collection("users_data")
-                                        .whereEqualTo("plenxo_id", formattedPxId)
-                                        .limit(1).get().await()
-                                }
-                                if (snapData.isEmpty) {
-                                    snapData = firestore.collection("users_data")
-                                        .whereEqualTo("userCode", targetId)
-                                        .limit(1).get().await()
-                                }
-                                if (!snapData.isEmpty) {
-                                    foundEmailStr = snapData.documents[0].getString("email")
-                                }
-                            }
-
-                            if (foundEmailStr.isNullOrBlank()) {
                                 // Fallback to Firebase Realtime Database /users node
                                 try {
                                     val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users")
@@ -2588,17 +2526,13 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         return@launch
                     }
 
-                    // Strict Cloudflare Worker OTP verification check
+                    // Strict Firestore user profile check
                     val userDocCheck = try {
                         firestore.collection("users").document(uid).get().await()
                     } catch (e: Throwable) {
                         null
                     }
-                    val userDocToUse = if (userDocCheck != null && userDocCheck.exists()) {
-                        userDocCheck
-                    } else {
-                        try { firestore.collection("users_data").document(uid).get().await() } catch (e: Throwable) { null }
-                    }
+                    val userDocToUse = userDocCheck
 
                     // Check 2FA conditional enforcement on login
                     val is2FA = userDocToUse?.getBoolean("is2FAEnabled") == true || 
@@ -2675,12 +2609,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         Log.w("Plenxo", "Firestore terms update on login note: ${e.message}")
                     }
 
-                    try {
-                        firestore.collection("users").document(uid).update(mapOf("terms_accepted" to true))
-                    } catch (e: Throwable) {
-                        Log.w("Plenxo", "Supabase terms update on login note: ${e.message}")
-                    }
-                    
                     try { SessionManager.saveLoginState(getApplication(), uid, resolvedEmail) } catch (e: Throwable) {}
                     try { saveFcmToken() } catch (e: Throwable) {}
                     try { triggerLoginAlertEmail(resolvedEmail) } catch (ignored: Throwable) {}
@@ -2689,11 +2617,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     
                     try {
                         val userDocDetailed = kotlinx.coroutines.withTimeoutOrNull(6000L) {
-                            var doc = try { firestore.collection("users").document(uid).get().await() } catch (e: Throwable) { null }
-                            if (doc == null || !doc.exists()) {
-                                doc = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Throwable) { null }
-                            }
-                            doc
+                            try { firestore.collection("users").document(uid).get().await() } catch (e: Throwable) { null }
                         }
                         if (userDocDetailed != null && userDocDetailed.exists()) {
                             val existingPxId = userDocDetailed.getString("plenxoId")
@@ -2716,7 +2640,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             val formattedPxId = if (existingPxId.isNotBlank()) {
                                 if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
                             } else {
-                                "PX-${(100000..999999).random()}"
+                                com.example.model.resolveOrCreatePlenxoId(uid, firestore)
                             }
 
                             if (formattedPxId.isNotBlank()) {
@@ -2756,7 +2680,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 age = ageStr
                             )
                         } else {
-                            // First time document creation for new account
+                            // First time document creation for new account ONLY if document doesn't exist
                             val generatedPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
                             val numericCode = generatedPxId.removePrefix("PX-")
                             val initialMap = mapOf(
@@ -2774,7 +2698,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 "createdAt" to System.currentTimeMillis()
                             )
                             firestore.collection("users").document(uid).set(initialMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                            firestore.collection("users_data").document(uid).set(initialMap, com.google.firebase.firestore.SetOptions.merge()).await()
 
                             plenxoId.value = generatedPxId
                             revealedPlenxoId.value = generatedPxId
@@ -3088,7 +3011,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                         "updatedAt" to System.currentTimeMillis()
                                     )
                                     firestore.collection("users").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                                    firestore.collection("users_data").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
 
                                     try {
                                         val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
@@ -3144,7 +3066,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                         "is_email_verified" to true
                                     )
                                     firestore.collection("users").document(uid).set(verificationMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                                    firestore.collection("users_data").document(uid).set(verificationMap, com.google.firebase.firestore.SetOptions.merge()).await()
                                 } catch (e: Exception) {
                                     Log.e("Plenxo", "Failed to update email verification status: ${e.message}", e)
                                 }
@@ -3153,13 +3074,54 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             val userDoc = if (uid.isNotEmpty()) {
                                 try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
                             } else null
+
+                            val existingPxId = userDoc?.getString("plenxoId")
+                                ?: userDoc?.getString("plenxo_id")
+                                ?: userDoc?.getString("px_id")
+                                ?: userDoc?.getString("userCode")
+                                ?: ""
+                            val existingName = userDoc?.getString("displayName")
+                                ?: userDoc?.getString("name")
+                                ?: ""
+                            val existingBio = userDoc?.getString("bio")
+                                ?: userDoc?.getString("statusMessage")
+                                ?: ""
+                            val existingPic = userDoc?.getString("profilePicUrl")
+                                ?: userDoc?.getString("avatar_url")
+                                ?: userDoc?.getString("photoUrl")
+                                ?: ""
+                            val existingAge = userDoc?.get("age")?.toString()
+                                ?: userDoc?.getString("dateOfBirth")
+                                ?: ""
+
                             val isSetupCompleted = userDoc?.getBoolean("isProfileSetupCompleted") == true ||
                                                    userDoc?.getBoolean("isProfileSetup") == true ||
                                                    userDoc?.getBoolean("profileSetupCompleted") == true ||
                                                    userDoc?.getBoolean("is_profile_completed") == true ||
-                                                   userDoc?.getBoolean("isProfileCompleted") == true
+                                                   userDoc?.getBoolean("isProfileCompleted") == true ||
+                                                   (existingPxId.isNotBlank() && existingName.isNotBlank())
 
-                            if (isSetupCompleted) {
+                            val isReturningUser = userDoc != null && userDoc.exists() && (existingPxId.isNotBlank() || isSetupCompleted)
+
+                            if (isReturningUser) {
+                                // Returning user: Save fetched data to SessionManager and immediately route to HOME
+                                val formatted = if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
+                                plenxoId.value = formatted
+                                revealedPlenxoId.value = formatted
+                                userCode.value = formatted.removePrefix("PX-")
+                                if (existingName.isNotBlank()) displayName.value = existingName
+                                if (existingBio.isNotBlank()) aboutText.value = existingBio
+                                if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
+
+                                SessionManager.saveUserProfileLocally(
+                                    getApplication(),
+                                    plenxoId = formatted,
+                                    displayName = existingName,
+                                    bio = existingBio,
+                                    profilePicUrl = existingPic,
+                                    age = existingAge
+                                )
+
                                 _authState.value = AuthState.AUTHENTICATED
                                 SessionManager.saveLoginState(getApplication(), uid, rawEmail)
                                 triggerLoginAlertEmail(rawEmail)
@@ -3168,82 +3130,35 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 startListeningForChats()
                                 com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
                                 com.example.util.AppLockManager.setLocked(getApplication(), false)
-                                if (!com.example.util.SessionManager.isOnboardingCompleted(getApplication())) {
-                                    val idToReveal = plenxoId.value.ifBlank { "PX-892104" }
-                                    setRevealedPlenxoId(idToReveal)
-                                    _currentScreen.value = PlenxoScreen.PLENXO_ID_REVEAL
-                                } else {
-                                    _currentScreen.value = PlenxoScreen.HOME
-                                }
+                                observeCurrentUserProfile()
+                                _currentScreen.value = PlenxoScreen.HOME
                             } else {
+                                // Genuine New User: Generate permanent Plenxo ID and route to Profile Setup
                                 _authState.value = AuthState.NEEDS_PROFILE_SETUP
                                 if (uid.isNotEmpty()) {
                                     try {
-                                        kotlinx.coroutines.withTimeoutOrNull(8000L) {
-                                            var docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
-                                            if (docSnap == null || !docSnap.exists()) {
-                                                docSnap = try { firestore.collection("users_data").document(uid).get().await() } catch (e: Exception) { null }
-                                            }
-
-                                            if (docSnap != null && docSnap.exists()) {
-                                                // Returning user: Load existing details, DO NOT overwrite!
-                                                val existingPxId = docSnap.getString("plenxoId")
-                                                    ?: docSnap.getString("plenxo_id")
-                                                    ?: docSnap.getString("userCode")
-                                                    ?: ""
-                                                val existingName = docSnap.getString("displayName")
-                                                    ?: docSnap.getString("name")
-                                                    ?: ""
-                                                val existingBio = docSnap.getString("bio")
-                                                    ?: docSnap.getString("statusMessage")
-                                                    ?: ""
-                                                val existingPic = docSnap.getString("profilePicUrl")
-                                                    ?: docSnap.getString("avatar_url")
-                                                    ?: ""
-                                                val existingAge = docSnap.get("age")?.toString()
-                                                    ?: docSnap.getString("dateOfBirth")
-                                                    ?: ""
-
-                                                if (existingPxId.isNotBlank()) {
-                                                    val formatted = if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
-                                                    plenxoId.value = formatted
-                                                    userCode.value = formatted.removePrefix("PX-")
-                                                }
-                                                if (existingName.isNotBlank()) displayName.value = existingName
-                                                if (existingBio.isNotBlank()) aboutText.value = existingBio
-                                                if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
-
-                                                SessionManager.saveUserProfileLocally(
-                                                    getApplication(),
-                                                    plenxoId = plenxoId.value,
-                                                    displayName = existingName,
-                                                    bio = existingBio,
-                                                    profilePicUrl = existingPic,
-                                                    age = existingAge
-                                                )
-                                            } else {
-                                                // New signup without doc: create initial doc
-                                                val existingPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
-                                                val generatedCode = existingPxId.removePrefix("PX-")
-                                                val initialUser = mapOf(
-                                                    "uid" to uid,
-                                                    "id" to uid,
-                                                    "email" to rawEmail,
-                                                    "displayName" to rawEmail.substringBefore("@"),
-                                                    "plenxoId" to existingPxId,
-                                                    "userCode" to generatedCode,
-                                                    "user_code" to generatedCode,
-                                                    "px_id" to existingPxId,
-                                                    "px_code" to generatedCode,
-                                                    "lastLoginTimestamp" to System.currentTimeMillis()
-                                                )
-                                                firestore.collection("users").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
-                                                firestore.collection("users_data").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
-                                                Log.d("Plenxo", "Initial Firestore profile created on OTP verification")
-                                            }
-                                        }
+                                        val generatedPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
+                                        val generatedCode = generatedPxId.removePrefix("PX-")
+                                        val initialUser = mapOf(
+                                            "uid" to uid,
+                                            "id" to uid,
+                                            "email" to rawEmail,
+                                            "displayName" to rawEmail.substringBefore("@"),
+                                            "plenxoId" to generatedPxId,
+                                            "userCode" to generatedCode,
+                                            "user_code" to generatedCode,
+                                            "px_id" to generatedPxId,
+                                            "px_code" to generatedCode,
+                                            "isProfileSetupCompleted" to false,
+                                            "lastLoginTimestamp" to System.currentTimeMillis()
+                                        )
+                                        firestore.collection("users").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
+                                        
+                                        plenxoId.value = generatedPxId
+                                        revealedPlenxoId.value = generatedPxId
+                                        userCode.value = generatedCode
                                     } catch (e: Exception) {
-                                        Log.e("Plenxo", "Failed in OTP verification profile logic: ${e.message}", e)
+                                        Log.e("Plenxo", "Failed in OTP verification new user profile logic: ${e.message}", e)
                                     }
                                 }
                                 navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
@@ -3372,7 +3287,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * Enables 2FA with a validated 6-digit Master PIN.
-     * Updates Firestore users/{uid} and users_data/{uid} with hashed PIN and is2FAEnabled = true.
+     * Updates Firestore users/{uid} with hashed PIN and is2FAEnabled = true.
      */
     fun enable2FA(masterPin: String, onComplete: ((Boolean, String?) -> Unit)? = null) {
         val trimmedPin = masterPin.trim()
@@ -3405,12 +3320,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     "updatedAt" to System.currentTimeMillis()
                 )
 
-                val batch = firestore.batch()
-                val userRef = firestore.collection("users").document(currentUid)
-                val userDataRef = firestore.collection("users_data").document(currentUid)
-                batch.set(userRef, updateData, com.google.firebase.firestore.SetOptions.merge())
-                batch.set(userDataRef, updateData, com.google.firebase.firestore.SetOptions.merge())
-                batch.commit().await()
+                firestore.collection("users").document(currentUid)
+                    .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+                    .await()
 
                 withContext(Dispatchers.Main) {
                     _is2FAEnabled.value = true
@@ -3461,10 +3373,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     val userDoc = firestore.collection("users").document(currentUid).get().await()
                     storedHash = userDoc.getString("masterPin") ?: userDoc.getString("master_pin")
                 }
-                if (storedHash.isNullOrEmpty()) {
-                    val userDataDoc = firestore.collection("users_data").document(currentUid).get().await()
-                    storedHash = userDataDoc.getString("masterPin") ?: userDataDoc.getString("master_pin")
-                }
 
                 val enteredHash = hashMasterPin(trimmedPin)
                 val isPinCorrect = (storedHash != null && (storedHash == enteredHash || storedHash == trimmedPin))
@@ -3489,12 +3397,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     "updatedAt" to System.currentTimeMillis()
                 )
 
-                val batch = firestore.batch()
-                val userRef = firestore.collection("users").document(currentUid)
-                val userDataRef = firestore.collection("users_data").document(currentUid)
-                batch.set(userRef, updateData, com.google.firebase.firestore.SetOptions.merge())
-                batch.set(userDataRef, updateData, com.google.firebase.firestore.SetOptions.merge())
-                batch.commit().await()
+                firestore.collection("users").document(currentUid)
+                    .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+                    .await()
 
                 withContext(Dispatchers.Main) {
                     _is2FAEnabled.value = false
@@ -3636,14 +3541,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         }
 
                         try {
-                            firestore.collection("users_data").document(currentUid)
-                                .set(stepOneData, com.google.firebase.firestore.SetOptions.merge())
-                                .await()
-                        } catch (e: Exception) {
-                            Log.w("Plenxo", "Firestore users_data write: ${e.message}")
-                        }
-
-                        try {
                             val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(currentUid)
                             val rdbMap = hashMapOf<String, Any>(
                                 "uid" to currentUid,
@@ -3716,16 +3613,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val uid = currentUser.uid
                 val userDataDoc = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
-                    val userDoc = try {
+                    try {
                         firestore.collection("users").document(uid).get().await()
                     } catch (e: Exception) { null }
-                    if (userDoc != null && userDoc.exists()) {
-                        userDoc
-                    } else {
-                        try {
-                            firestore.collection("users_data").document(uid).get().await()
-                        } catch (e: Exception) { null }
-                    }
                 }
 
                 val isSetupCompleted = if (userDataDoc != null && userDataDoc.exists()) {
@@ -3851,9 +3741,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 try {
                     val writeRes = kotlinx.coroutines.withTimeoutOrNull(8000L) {
                         firestore.collection("users").document(currentUid).set(profileDataMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                        try {
-                            firestore.collection("users_data").document(currentUid).set(profileDataMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                        } catch (_: Exception) {}
                         true
                     }
                     if (writeRes == null) {
@@ -4071,17 +3958,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                         updates["user_code"] = currentCode
                     }
 
-                    firestore.collection("users_data").document(currentUid)
+                    firestore.collection("users").document(currentUid)
                         .set(updates, com.google.firebase.firestore.SetOptions.merge())
                         .await()
-
-                    try {
-                        firestore.collection("users").document(currentUid)
-                            .set(updates, com.google.firebase.firestore.SetOptions.merge())
-                            .await()
-                    } catch (e: Exception) {
-                        Log.w("Plenxo", "Users update warning: ${e.message}")
-                    }
                 }
 
                 withContext(Dispatchers.Main) {
@@ -4193,9 +4072,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 _outgoingPendingRequests.value = outgoingList
             }
 
-        // 3. Observe Connected Friends from users_data/{uid}/friends
+        // 3. Observe Connected Friends from users/{uid}/friends
         connectedFriendsListener?.remove()
-        connectedFriendsListener = firestore.collection("users_data")
+        connectedFriendsListener = firestore.collection("users")
             .document(uid)
             .collection("friends")
             .addSnapshotListener { snapshot, error ->
@@ -4224,15 +4103,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 livePhoto = userDoc.getString("profilePicUrl") ?: userDoc.getString("avatarUrl") ?: livePhoto
                                 livePxId = userDoc.getString("plenxoId") ?: userDoc.getString("plenxo_id") ?: userDoc.getString("userCode") ?: ""
                                 liveEmail = userDoc.getString("email") ?: ""
-                            } else {
-                                val altDoc = firestore.collection("users_data").document(friendUid).get().await()
-                                if (altDoc.exists()) {
-                                    liveName = altDoc.getString("displayName") ?: altDoc.getString("name") ?: liveName
-                                    liveBio = altDoc.getString("bio") ?: altDoc.getString("statusMessage") ?: ""
-                                    livePhoto = altDoc.getString("profilePicUrl") ?: altDoc.getString("avatarUrl") ?: livePhoto
-                                    livePxId = altDoc.getString("plenxoId") ?: altDoc.getString("plenxo_id") ?: altDoc.getString("userCode") ?: ""
-                                    liveEmail = altDoc.getString("email") ?: ""
-                                }
                             }
                         } catch (e: Exception) {
                             Log.w("PlenxoFriends", "Note fetching friend details for $friendUid: ${e.message}")
@@ -4735,20 +4605,20 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             uidsToFetch.forEach { uid ->
                 try {
-                    var userDoc = firestore.collection("users").document(uid).get().await()
+                    val userDoc = firestore.collection("users").document(uid).get().await()
                     var user = userDoc.toObject(User::class.java)
                     if (user == null || user.displayName.isBlank()) {
-                        val userDataDoc = firestore.collection("users_data").document(uid).get().await()
-                        if (userDataDoc.exists()) {
-                            val name = userDataDoc.getString("displayName")
-                                ?: userDataDoc.getString("name")
+                        if (userDoc.exists()) {
+                            val name = userDoc.getString("displayName")
+                                ?: userDoc.getString("name")
                                 ?: "Plenxo User"
-                            val pic = userDataDoc.getString("profilePic")
-                                ?: userDataDoc.getString("photoUrl")
+                            val pic = userDoc.getString("profilePic")
+                                ?: userDoc.getString("profilePicUrl")
+                                ?: userDoc.getString("photoUrl")
                                 ?: ""
-                            val ringId = userDataDoc.getString("profileRingId") ?: "none"
-                            val userCode = userDataDoc.getString("userCode") ?: userDataDoc.getString("plenxoId") ?: ""
-                            val plenxoId = userDataDoc.getString("plenxoId") ?: userDataDoc.getString("userCode") ?: ""
+                            val ringId = userDoc.getString("profileRingId") ?: "none"
+                            val userCode = userDoc.getString("userCode") ?: userDoc.getString("plenxoId") ?: ""
+                            val plenxoId = userDoc.getString("plenxoId") ?: userDoc.getString("userCode") ?: ""
                             user = User(uid = uid, displayName = name, profilePicUrl = pic, profileRingId = ringId, userCode = userCode, plenxoId = plenxoId)
                         }
                     }
@@ -4773,7 +4643,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
             if (currentUid.isEmpty()) return@launch
             try {
                 if (currentUserProfile.value == null) {
-                    val userDoc = firestore.collection("users_data").document(currentUid).get().await()
+                    val userDoc = firestore.collection("users").document(currentUid).get().await()
                     val user = userDoc.toObject(UserProfile::class.java)
                     currentUserProfile.value = user
                 }
@@ -4824,7 +4694,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             try {
                 val foundDocs = mutableMapOf<String, UserProfile>()
-                val collections = listOf("users", "users_data")
+                val collections = listOf("users")
                 val fields = listOf("plenxoId", "userCode", "plenxo_id", "px_id", "user_code")
 
                 for (collectionName in collections) {
@@ -5230,7 +5100,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     try {
                         var receiverPublicKey = ""
                         try {
-                            val userDoc = firestore.collection("users_data").document(receiverId).get().await()
+                            val userDoc = firestore.collection("users").document(receiverId).get().await()
                             val receiverProfile = userDoc.toObject(UserProfile::class.java)
                             receiverPublicKey = receiverProfile?.publicKey ?: ""
                         } catch (keyEx: Exception) {

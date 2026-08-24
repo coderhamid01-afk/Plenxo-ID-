@@ -6,7 +6,7 @@ import java.security.MessageDigest
 
 /**
  * Enterprise-grade Security Data Model for Plenxo.
- * Mapped to Firestore `users/{uid}` and `users_data/{uid}`.
+ * Mapped to Firestore `users/{uid}`.
  */
 @Keep
 @Serializable

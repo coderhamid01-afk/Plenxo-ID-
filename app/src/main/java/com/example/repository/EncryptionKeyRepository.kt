@@ -91,16 +91,12 @@ class EncryptionKeyRepository {
                 "updatedAt" to FieldValue.serverTimestamp()
             )
 
-            firestore.collection("users_data").document(uid)
-                .set(firestoreData, SetOptions.merge())
-                .await()
-
             firestore.collection("users").document(uid)
                 .set(firestoreData, SetOptions.merge())
                 .await()
 
-            // Also store encrypted backup in a dedicated keys collection for safety
-            firestore.collection("users_data")
+            // Also store encrypted backup in a dedicated keys subcollection on users
+            firestore.collection("users")
                 .document(uid)
                 .collection("security_keys")
                 .document("active_key")
@@ -151,7 +147,7 @@ class EncryptionKeyRepository {
 
             // Archive old key in historical key collection
             if (currentMeta != null && currentMeta.publicKeyBase64.isNotEmpty()) {
-                val archivedRef = firestore.collection("users_data")
+                val archivedRef = firestore.collection("users")
                     .document(uid)
                     .collection("archived_keys")
                     .document("v_${currentMeta.keyVersion}")
@@ -164,10 +160,10 @@ class EncryptionKeyRepository {
                 ))
             }
 
-            val userRef = firestore.collection("users_data").document(uid)
+            val userRef = firestore.collection("users").document(uid)
             batch.set(userRef, firestoreData, SetOptions.merge())
 
-            val activeKeyRef = firestore.collection("users_data")
+            val activeKeyRef = firestore.collection("users")
                 .document(uid)
                 .collection("security_keys")
                 .document("active_key")
@@ -194,7 +190,7 @@ class EncryptionKeyRepository {
     suspend fun fetchPublicKey(userId: String): String? {
         if (userId.isEmpty()) return null
         return try {
-            val doc = firestore.collection("users_data").document(userId).get().await()
+            val doc = firestore.collection("users").document(userId).get().await()
             doc.getString("publicKey") ?: doc.getString("public_key")
         } catch (e: Exception) {
             Log.e("EncryptionKeyRepo", "Failed to fetch public key for user $userId: ${e.message}")
@@ -205,7 +201,7 @@ class EncryptionKeyRepository {
     suspend fun fetchUserKeyMetadata(userId: String = currentUserId): UserKeyMetadata? {
         if (userId.isEmpty()) return null
         return try {
-            val doc = firestore.collection("users_data").document(userId).get().await()
+            val doc = firestore.collection("users").document(userId).get().await()
             if (!doc.exists()) return null
 
             val pubKey = doc.getString("publicKey") ?: ""
@@ -237,7 +233,7 @@ class EncryptionKeyRepository {
             return@callbackFlow
         }
 
-        val docRef = firestore.collection("users_data").document(userId)
+        val docRef = firestore.collection("users").document(userId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("EncryptionKeyRepo", "Error listening for public key of $userId: ${error.message}")
