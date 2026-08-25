@@ -167,8 +167,15 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
     )
 
     // Global Back Handler
-    androidx.activity.compose.BackHandler(enabled = currentScreen != PlenxoScreen.HOME && currentScreen != PlenxoScreen.LOGIN && currentScreen != PlenxoScreen.PROFILE_SETUP) {
-        if (!viewModel.navigateBack()) {
+    androidx.activity.compose.BackHandler(enabled = currentScreen != PlenxoScreen.HOME && currentScreen != PlenxoScreen.LOGIN) {
+        if (currentScreen == PlenxoScreen.PROFILE_SETUP || currentScreen == PlenxoScreen.AVATAR_SETUP || currentScreen == PlenxoScreen.FINAL_DETAILS) {
+            // User backing out of profile setup: account is already securely persisted in Firestore with permanent Plenxo ID
+            if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
+                viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
+            } else {
+                viewModel.navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
+            }
+        } else if (!viewModel.navigateBack()) {
             if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
                 viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
             } else {
@@ -259,6 +266,8 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
                 PlenxoIdRevealScreen(
                     plenxoId = plenxoId,
                     onEnterPlenxo = {
+                        viewModel.setAuthState(com.example.model.AuthState.AUTHENTICATED)
+                        com.example.util.SessionManager.saveOnboardingCompleted(viewModel.getApplication(), true)
                         viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
                     }
                 )

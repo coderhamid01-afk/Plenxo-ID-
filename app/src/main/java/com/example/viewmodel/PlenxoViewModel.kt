@@ -435,58 +435,15 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun saveProfileSetup() {
-        var currentUid = currentUserId
-        if (currentUid.isEmpty()) {
-            val savedEmail = email.value.ifBlank { "user@plenxo.app" }
-            currentUid = savedEmail.replace(".", "_")
-            com.example.util.SessionManager.saveLoginState(getApplication(), currentUid, savedEmail)
-        }
-        _isLoading.value = true
-        viewModelScope.launch {
-            try {
-                val avatarUrl = uploadedProfilePicUrl.value ?: galleryImageUriString.value ?: ""
-                val dName = displayName.value.ifBlank { "Plenxo User" }
-
-                // Retrieve or resolve single authoritative Plenxo ID
-                val existingPlenxoId = com.example.model.resolveOrCreatePlenxoId(currentUid, firestore)
-                val numericCode = existingPlenxoId.removePrefix("PX-")
-                plenxoId.value = existingPlenxoId
-                userCode.value = numericCode
-
-                val profileMap = mapOf(
-                    "id" to currentUid,
-                    "uid" to currentUid,
-                    "displayName" to dName,
-                    "display_name" to dName,
-                    "plenxoId" to existingPlenxoId,
-                    "userCode" to numericCode,
-                    "user_code" to numericCode,
-                    "plenxo_id" to existingPlenxoId,
-                    "px_id" to existingPlenxoId,
-                    "px_code" to numericCode,
-                    "profilePicUrl" to avatarUrl,
-                    "avatar_url" to avatarUrl,
-                    "statusMessage" to "Hey there! I am using Plenxo.",
-                    "is_profile_completed" to true,
-                    "isProfileCompleted" to true
-                )
-
-                // Save directly to Firestore under users collection with timeout guard
-                kotlinx.coroutines.withTimeoutOrNull(8000L) {
-                    firestore.collection("users")
-                        .document(currentUid)
-                        .set(profileMap, com.google.firebase.firestore.SetOptions.merge())
-                        .await()
-                }
-
-                _currentScreen.value = PlenxoScreen.HOME
-            } catch (e: Exception) {
-                Log.e("Plenxo", "Failed to save profile setup", e)
-                _errorMessage.value = "Failed to save profile: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
+        val avatarUrl = uploadedProfilePicUrl.value ?: galleryImageUriString.value ?: ""
+        val dName = displayName.value.ifBlank { "Plenxo User" }
+        val currentPx = plenxoId.value.ifBlank { "PX-000000" }
+        saveProfileStepOne(
+            displayName = dName,
+            plenxoId = currentPx,
+            avatarUrl = avatarUrl,
+            bio = aboutText.value
+        )
     }
 
     // User Discovery & Social Dashboard
@@ -1477,6 +1434,19 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 if (!pin.isNullOrBlank()) {
                                     _storedMasterPinHash.value = pin
                                 }
+
+                                currentUserProfile.value = UserProfile(
+                                    uid = uid,
+                                    id = uid,
+                                    email = fbUser.email ?: "",
+                                    displayName = fetchedName,
+                                    bio = fetchedBio,
+                                    statusMessage = fetchedBio,
+                                    profilePicUrl = fetchedPic,
+                                    plenxoId = plenxoId.value,
+                                    userCode = userCode.value,
+                                    profileRingId = docToUse.getString("profileRingId") ?: docToUse.getString("selectedRingId") ?: "none"
+                                )
 
                                 SessionManager.saveUserProfileLocally(
                                     getApplication(),
@@ -3070,15 +3040,20 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     Log.d("OTP_DEBUG", "Received from Netlify: ${_activeOtp.value}")
                     Log.d("OTP_DEBUG", "Entered by User: $userInput")
 
-                    val isDirectMatch = currentActive.isNotEmpty() && (currentActive == userInput || currentActive.equals(userInput, ignoreCase = true))
+                    val isDirectMatch = (currentActive.isNotEmpty() && (currentActive == userInput || currentActive.equals(userInput, ignoreCase = true))) ||
+                                        (expectedOtp.isNotEmpty() && (expectedOtp == userInput || expectedOtp.equals(userInput, ignoreCase = true)))
 
                     val firestoreOtps = mutableListOf<String>()
                     if (!isDirectMatch) {
                         if (currentUid.isNotBlank()) {
-                            firestoreOtps.addAll(OtpUtils.getFirestoreOtpsForUser(currentUid, firestore))
+                            try {
+                                firestoreOtps.addAll(OtpUtils.getFirestoreOtpsForUser(currentUid, firestore))
+                            } catch (_: Exception) {}
                         }
                         if (rawEmail.isNotBlank()) {
-                            firestoreOtps.addAll(OtpUtils.getFirestoreOtpsForUser(rawEmail, firestore))
+                            try {
+                                firestoreOtps.addAll(OtpUtils.getFirestoreOtpsForUser(rawEmail, firestore))
+                            } catch (_: Exception) {}
                         }
                     }
 
@@ -3103,7 +3078,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
                             if (currentFirebaseUser == null && targetPassword.isNotBlank()) {
                                 try {
-                                    val authResult = kotlinx.coroutines.withTimeoutOrNull(20_000L) {
+                                    val authResult = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
                                         FirebaseAuth.getInstance().createUserWithEmailAndPassword(targetEmail, targetPassword).await()
                                     }
                                     currentFirebaseUser = authResult?.user ?: FirebaseAuth.getInstance().currentUser
@@ -3132,63 +3107,103 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 return@withTimeoutOrNull
                             }
 
-                            val random6 = (100000..999999).random()
-                            val generatedPxId = "PX-$random6"
-                            val generatedCode = "$random6"
+                            val generatedPxId = com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
+                            val generatedCode = generatedPxId.removePrefix("PX-")
 
                             plenxoId.value = generatedPxId
                             revealedPlenxoId.value = generatedPxId
+                            userCode.value = generatedCode
 
-                            // Asynchronously persist initial user profile to Firestore & Realtime DB
+                            // Authoritatively persist initial user profile to Firestore
+                            val initialUserMap = mapOf(
+                                "uid" to uid,
+                                "id" to uid,
+                                "email" to targetEmail,
+                                "displayName" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                "display_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                "name" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                "current_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                "plenxoId" to generatedPxId,
+                                "plenxo_id" to generatedPxId,
+                                "userCode" to generatedCode,
+                                "user_code" to generatedCode,
+                                "px_id" to generatedPxId,
+                                "px_code" to generatedCode,
+                                "isEmailVerified" to true,
+                                "emailVerified" to true,
+                                "is_email_verified" to true,
+                                "isProfileSetupCompleted" to false,
+                                "isProfileSetup" to false,
+                                "profileSetupCompleted" to false,
+                                "is_profile_completed" to false,
+                                "bio" to "",
+                                "profilePicUrl" to "",
+                                "created_at" to System.currentTimeMillis(),
+                                "createdAt" to System.currentTimeMillis(),
+                                "updatedAt" to System.currentTimeMillis()
+                            )
+
+                            for (attempt in 1..3) {
+                                try {
+                                    kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                                        firestore.collection("users").document(uid)
+                                            .set(initialUserMap, com.google.firebase.firestore.SetOptions.merge())
+                                            .await()
+                                    }
+                                    Log.d("PlenxoSignup", "Account document persisted to Firestore successfully on attempt $attempt")
+                                    break
+                                } catch (dbEx: Exception) {
+                                    Log.w("PlenxoSignup", "Initial user document write attempt $attempt failed: ${dbEx.message}")
+                                    if (attempt < 3) kotlinx.coroutines.delay(200L)
+                                }
+                            }
+
+                            // Realtime DB sync (asynchronous background - never blocks navigation)
                             viewModelScope.launch(Dispatchers.IO) {
                                 try {
-                                    val initialUserMap = mapOf(
+                                    val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
+                                    val rdbMap = hashMapOf<String, Any>(
                                         "uid" to uid,
                                         "id" to uid,
                                         "email" to targetEmail,
-                                        "displayName" to targetName,
+                                        "displayName" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                        "name" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                        "plenxo_id" to generatedPxId,
                                         "plenxoId" to generatedPxId,
-                                        "userCode" to generatedCode,
                                         "user_code" to generatedCode,
-                                        "px_id" to generatedPxId,
-                                        "px_code" to generatedCode,
-                                        "isEmailVerified" to true,
-                                        "emailVerified" to true,
-                                        "is_email_verified" to true,
-                                        "isProfileSetupCompleted" to false,
-                                        "isProfileSetup" to false,
-                                        "profileSetupCompleted" to false,
+                                        "userCode" to generatedCode,
                                         "created_at" to System.currentTimeMillis(),
                                         "createdAt" to System.currentTimeMillis(),
-                                        "updatedAt" to System.currentTimeMillis()
+                                        "is_profile_completed" to false,
+                                        "is_email_verified" to true
                                     )
-                                    firestore.collection("users").document(uid).set(initialUserMap, com.google.firebase.firestore.SetOptions.merge()).await()
-
-                                    try {
-                                        val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-                                        val rdbMap = hashMapOf<String, Any>(
-                                            "uid" to uid,
-                                            "id" to uid,
-                                            "email" to targetEmail,
-                                            "displayName" to targetName,
-                                            "name" to targetName,
-                                            "plenxo_id" to generatedPxId,
-                                            "plenxoId" to generatedPxId,
-                                            "user_code" to generatedCode,
-                                            "userCode" to generatedCode,
-                                            "created_at" to System.currentTimeMillis(),
-                                            "createdAt" to System.currentTimeMillis(),
-                                            "is_profile_completed" to false,
-                                            "is_email_verified" to true
-                                        )
-                                        rdbRef.updateChildren(rdbMap)
-                                    } catch (rdbEx: Exception) {
-                                        Log.w("PlenxoSignup", "Failed Realtime DB write: ${rdbEx.message}")
-                                    }
-                                } catch (dbEx: Exception) {
-                                    Log.e("PlenxoSignup", "Async profile creation notice: ${dbEx.message}", dbEx)
+                                    rdbRef.updateChildren(rdbMap)
+                                } catch (rdbEx: Exception) {
+                                    Log.w("PlenxoSignup", "Async Realtime DB sync: ${rdbEx.message}")
                                 }
                             }
+
+                            // Hydrate session & state so user identity survives immediately
+                            SessionManager.saveLoginState(getApplication(), uid, targetEmail)
+                            SessionManager.saveUserProfileLocally(
+                                getApplication(),
+                                plenxoId = generatedPxId,
+                                displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
+                                bio = "",
+                                profilePicUrl = ""
+                            )
+
+                            currentUserProfile.value = UserProfile(
+                                uid = uid,
+                                id = uid,
+                                email = targetEmail,
+                                displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
+                                bio = "",
+                                statusMessage = "",
+                                profilePicUrl = "",
+                                plenxoId = generatedPxId,
+                                userCode = generatedCode
+                            )
 
                             tempSignupEmail = ""
                             tempSignupPassword = ""
@@ -3197,7 +3212,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             confirmPassword.value = ""
 
                             _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                            _currentScreen.value = PlenxoScreen.PROFILE_SETUP
+                            navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
                             _isLoading.value = false
                         } else {
                             // Login OTP challenge or existing user flow
@@ -3250,7 +3265,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 val formatted = if (existingPxId.isNotBlank()) {
                                     if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
                                 } else {
-                                    com.example.model.resolveOrCreatePlenxoId(uid, firestore)
+                                    com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
                                 }
                                 plenxoId.value = formatted
                                 revealedPlenxoId.value = formatted
@@ -3258,6 +3273,18 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 if (existingName.isNotBlank()) displayName.value = existingName
                                 if (existingBio.isNotBlank()) aboutText.value = existingBio
                                 if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
+
+                                currentUserProfile.value = UserProfile(
+                                    uid = uid,
+                                    id = uid,
+                                    email = rawEmail,
+                                    displayName = existingName,
+                                    bio = existingBio,
+                                    statusMessage = existingBio,
+                                    profilePicUrl = existingPic,
+                                    plenxoId = formatted,
+                                    userCode = formatted.removePrefix("PX-")
+                                )
 
                                 SessionManager.saveUserProfileLocally(
                                     getApplication(),
@@ -3367,48 +3394,30 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     private val plenxoIdPattern = Regex("^PX-\\d{6}$")
 
     /**
-     * Generates a unique 6-digit Plenxo ID (e.g., PX-482019) and verifies availability in Firestore.
+     * Resolves or generates the permanent Plenxo ID for the active authenticated user.
      */
     fun generateUniquePlenxoId() {
+        val uid = currentUserId
         viewModelScope.launch(Dispatchers.IO) {
             _isGeneratingPlenxoId.value = true
             _isPlenxoIdAvailable.value = null
             try {
-                var candidateId = ""
-                var isUnique = false
-                var attempts = 0
-                val maxAttempts = 10
-
-                while (!isUnique && attempts < maxAttempts) {
-                    attempts++
-                    val random6Digits = (100000..999999).random()
-                    candidateId = "PX-$random6Digits"
-
-                    val snapshot = firestore.collection("users")
-                        .whereEqualTo("plenxoId", candidateId)
-                        .limit(1)
-                        .get()
-                        .await()
-
-                    if (snapshot.isEmpty) {
-                        isUnique = true
-                    }
+                val finalId = if (uid.isNotBlank()) {
+                    com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
+                } else {
+                    com.example.model.generateUniqueNumericPlenxoId(firestore)
                 }
-
-                val finalId = candidateId
                 withContext(Dispatchers.Main) {
                     plenxoId.value = finalId
+                    revealedPlenxoId.value = finalId
                     userCode.value = finalId.removePrefix("PX-")
-                    _isPlenxoIdAvailable.value = isUnique
+                    _isPlenxoIdAvailable.value = true
                     _isGeneratingPlenxoId.value = false
-                    Log.d("Plenxo", "Generated unique Plenxo ID: $finalId (unique=$isUnique)")
+                    Log.d("Plenxo", "Resolved permanent Plenxo ID: $finalId")
                 }
             } catch (e: Exception) {
-                Log.e("Plenxo", "Error generating unique Plenxo ID: ${e.message}", e)
-                val fallbackId = "PX-" + (100000..999999).random()
+                Log.e("Plenxo", "Error resolving permanent Plenxo ID: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    plenxoId.value = fallbackId
-                    userCode.value = fallbackId.removePrefix("PX-")
                     _isPlenxoIdAvailable.value = true
                     _isGeneratingPlenxoId.value = false
                 }
@@ -3642,15 +3651,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         
             var success = false
             try {
-                val inputPxId = plenxoId.trim()
-                val permanentPxId = if (inputPxId.matches(Regex("^PX-\\d{6}$"))) {
-                    inputPxId
-                } else if (this@PlenxoViewModel.plenxoId.value.trim().matches(Regex("^PX-\\d{6}$"))) {
-                    this@PlenxoViewModel.plenxoId.value.trim()
-                } else {
-                    withContext(Dispatchers.IO) {
-                        com.example.model.resolveOrCreatePlenxoId(currentUid, firestore)
-                    }
+                val permanentPxId = withContext(Dispatchers.IO) {
+                    com.example.model.getOrCreatePermanentPlenxoId(currentUid, firestore)
                 }
                 val userNumericCode = permanentPxId.removePrefix("PX-")
                 val userEmail = FirebaseAuth.getInstance().currentUser?.email ?: email.value.trim()
@@ -3736,7 +3738,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             "isProfileSetupCompleted" to true,
                             "is_email_verified" to true
                         )
-                        rdbRef.updateChildren(rdbMap).await()
+                        rdbRef.updateChildren(rdbMap)
                     } catch (e: Exception) {
                         Log.w("Plenxo", "Realtime DB users write: ${e.message}")
                     }
@@ -3777,16 +3779,10 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     profilePicUrl = avatarUrl.trim(),
                     age = dobMillis?.toString() ?: ""
                 )
-                SessionManager.saveOnboardingCompleted(getApplication(), true)
 
                 observeCurrentUserProfile()
-                this@PlenxoViewModel.setAuthState(AuthState.AUTHENTICATED)
                 this@PlenxoViewModel.setRevealedPlenxoId(permanentPxId)
-                if (!com.example.util.SessionManager.isOnboardingCompleted(getApplication())) {
-                    this@PlenxoViewModel.navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
-                } else {
-                    this@PlenxoViewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
-                }
+                this@PlenxoViewModel.navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                 Log.d("Plenxo", "Profile Step 1 saved successfully for user $currentUid with Plenxo ID $permanentPxId")
                 success = true
             } catch (e: Exception) {
@@ -3864,8 +3860,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun navigateToFinalDetails() {
-        val randomCode = (100000..999999).random().toString()
-        userCode.value = randomCode
+        val numericCode = plenxoId.value.removePrefix("PX-").ifBlank { "000000" }
+        userCode.value = numericCode
         _currentScreen.value = PlenxoScreen.FINAL_DETAILS
     }
 

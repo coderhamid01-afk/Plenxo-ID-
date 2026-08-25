@@ -47,7 +47,9 @@ fun PlenxoNavGraph(
             AuthState.NEEDS_PROFILE_SETUP -> {
                 if (currentScreen != PlenxoScreen.PROFILE_SETUP &&
                     currentScreen != PlenxoScreen.AVATAR_SETUP &&
-                    currentScreen != PlenxoScreen.FINAL_DETAILS
+                    currentScreen != PlenxoScreen.FINAL_DETAILS &&
+                    currentScreen != PlenxoScreen.PLENXO_ID_REVEAL &&
+                    currentScreen != PlenxoScreen.WELCOME
                 ) {
                     viewModel.navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
                 }
@@ -55,11 +57,7 @@ fun PlenxoNavGraph(
             AuthState.AUTHENTICATED -> {
                 if (currentScreen == PlenxoScreen.LOGIN ||
                     currentScreen == PlenxoScreen.SIGNUP ||
-                    currentScreen == PlenxoScreen.OTP_VERIFICATION ||
-                    currentScreen == PlenxoScreen.PROFILE_SETUP ||
-                    currentScreen == PlenxoScreen.AVATAR_SETUP ||
-                    currentScreen == PlenxoScreen.FINAL_DETAILS ||
-                    currentScreen == PlenxoScreen.WELCOME
+                    currentScreen == PlenxoScreen.OTP_VERIFICATION
                 ) {
                     viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
                 }
