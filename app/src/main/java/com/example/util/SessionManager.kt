@@ -364,7 +364,28 @@ object SessionManager {
         val sanitized = identifier.trim().lowercase()
         getEncryptedPrefs(context)?.edit()?.putLong("lockout_until_$sanitized", timestamp)?.apply()
     }
+    fun getUserProfileLocally(context: Context): LocalUserProfile {
+        return try {
+            LocalUserProfile(
+                plenxoId = getLocalPlenxoId(context),
+                displayName = getLocalDisplayName(context),
+                bio = getLocalBio(context),
+                profilePicUrl = getLocalProfilePicUrl(context),
+                age = getLocalAge(context)
+            )
+        } catch (_: Exception) {
+            LocalUserProfile()
+        }
+    }
 }
+
+data class LocalUserProfile(
+    val plenxoId: String = "",
+    val displayName: String = "",
+    val bio: String = "",
+    val profilePicUrl: String = "",
+    val age: String = ""
+)
 
 data class LoginState(
     val isLoggedIn: Boolean,

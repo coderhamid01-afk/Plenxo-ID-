@@ -61,19 +61,20 @@ fun ProfileSetupScreen(
 
     // Local screen states
     var displayName by remember { mutableStateOf(viewModel.displayName.value) }
-    var bio by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf(viewModel.aboutText.value) }
     var selectedGender by remember { mutableStateOf("") }
     var genderDropdownExpanded by remember { mutableStateOf(false) }
     var selectedDobMillis by remember { mutableStateOf<Long?>(null) }
     var selectedInterests by remember { mutableStateOf(setOf<String>()) }
 
-    var avatarUrl by remember { mutableStateOf("") }
+    var avatarUrl by remember { mutableStateOf(viewModel.galleryImageUriString.value?.ifBlank { viewModel.uploadedProfilePicUrl.value ?: "" } ?: viewModel.uploadedProfilePicUrl.value ?: "") }
     var isUploadingAvatar by remember { mutableStateOf(false) }
     var avatarUploadError by remember { mutableStateOf<String?>(null) }
 
-    // Auto-generate numeric Plenxo ID behind the scenes during setup profile stage
+    // Auto-generate numeric Plenxo ID behind the scenes during setup profile stage ONLY if not already assigned
     LaunchedEffect(Unit) {
-        if (plenxoId.isBlank() || !Regex("^PX-\\d{6}$").matches(plenxoId)) {
+        val currentPxId = viewModel.plenxoId.value.ifBlank { viewModel.revealedPlenxoId.value }
+        if (currentPxId.isBlank() || (!Regex("^PX-\\d{6}$").matches(currentPxId) && !Regex("^\\d{6}$").matches(currentPxId))) {
             viewModel.generateUniquePlenxoId()
         }
     }

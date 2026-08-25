@@ -64,15 +64,16 @@ class ProfileSetupViewModel : ViewModel() {
             val uid = currentUser.uid
             viewModelScope.launch {
                 try {
-                    val docSnap = try { firestore.collection("users").document(uid).get().await() } catch (e: Exception) { null }
-                    if (docSnap != null && docSnap.exists()) {
+                    val readResult = com.example.model.fetchUserDocumentSafely(uid, firestore)
+                    if (readResult.readConfirmed && readResult.snapshot != null && readResult.snapshot.exists()) {
+                        val docSnap = readResult.snapshot
                         val name = docSnap.getString("displayName") ?: docSnap.getString("name") ?: ""
                         val b = docSnap.getString("bio") ?: docSnap.getString("statusMessage") ?: ""
                         val pic = docSnap.getString("profilePicUrl") ?: docSnap.getString("avatar_url") ?: docSnap.getString("photoUrl") ?: ""
                         val dob = docSnap.getLong("dobTimestamp")
 
-                        if (name.isNotBlank()) displayName.value = name
-                        if (b.isNotBlank()) bio.value = b
+                        if (name.isNotBlank() && displayName.value.isBlank()) displayName.value = name
+                        if (b.isNotBlank() && bio.value.isBlank()) bio.value = b
                         if (dob != null && dob > 0L) dobMillis.value = dob
                         if (pic.isNotBlank() && profilePictureUri.value == null) {
                             try { profilePictureUri.value = Uri.parse(pic) } catch (_: Exception) {}
@@ -168,11 +169,20 @@ class ProfileSetupViewModel : ViewModel() {
 
             try {
                 val saveSuccess = kotlinx.coroutines.withTimeoutOrNull(12000L) {
+                    val readResult = com.example.model.fetchUserDocumentSafely(uid, firestore)
+                    val existingSnap = readResult.snapshot
                     val existingPlenxoId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
                     val numericCode = existingPlenxoId.removePrefix("PX-")
 
                     val userEmail = auth.currentUser?.email ?: ""
                     val formattedDob = DateUtils.formatDateForFirestore(dobMillis.value)
+                    val existingPicUrl = existingSnap?.getString("profilePicUrl") 
+                        ?: existingSnap?.getString("avatar_url") 
+                        ?: existingSnap?.getString("photoUrl") 
+                        ?: ""
+                    val finalPicUrl = catboxUrl.ifBlank { existingPicUrl }
+                    val existingBio = existingSnap?.getString("bio") ?: existingSnap?.getString("statusMessage") ?: ""
+                    val finalBio = if (bio.value.isNotBlank()) bio.value.trim() else existingBio
 
                     val userData = hashMapOf<String, Any>(
                         "uid" to uid,
@@ -181,9 +191,9 @@ class ProfileSetupViewModel : ViewModel() {
                         "displayName" to displayName.value.trim(),
                         "name" to displayName.value.trim(),
                         "current_name" to displayName.value.trim(),
-                        "bio" to bio.value.trim(),
-                        "current_bio" to bio.value.trim(),
-                        "statusMessage" to bio.value.trim(),
+                        "bio" to finalBio,
+                        "current_bio" to finalBio,
+                        "statusMessage" to finalBio,
                         "dateOfBirth" to formattedDob,
                         "dobTimestamp" to (dobMillis.value ?: 0L),
                         "gender" to selectedGender.value,
@@ -191,10 +201,10 @@ class ProfileSetupViewModel : ViewModel() {
                         "languageCode" to selectedLanguage.value.code,
                         "favouriteColour" to favouriteColorHex.value,
                         "theme" to selectedTheme.value,
-                        "profilePic" to catboxUrl,
-                        "profilePicUrl" to catboxUrl,
-                        "photoUrl" to catboxUrl,
-                        "current_profile_pic_url" to catboxUrl,
+                        "profilePic" to finalPicUrl,
+                        "profilePicUrl" to finalPicUrl,
+                        "photoUrl" to finalPicUrl,
+                        "current_profile_pic_url" to finalPicUrl,
                         "plenxoId" to existingPlenxoId,
                         "plenxo_id" to existingPlenxoId,
                         "userCode" to numericCode,
@@ -205,10 +215,10 @@ class ProfileSetupViewModel : ViewModel() {
                         "isProfileSetup" to true,
                         "profileSetupCompleted" to true,
                         "is_profile_completed" to true,
-                        "profileRing" to "none",
-                        "profileRingId" to "none",
-                        "selectedRingId" to "none",
-                        "createdAt" to System.currentTimeMillis(),
+                        "profileRing" to (existingSnap?.getString("profileRing") ?: "none"),
+                        "profileRingId" to (existingSnap?.getString("profileRingId") ?: "none"),
+                        "selectedRingId" to (existingSnap?.getString("selectedRingId") ?: "none"),
+                        "createdAt" to (existingSnap?.getLong("createdAt") ?: System.currentTimeMillis()),
                         "updatedAt" to System.currentTimeMillis()
                     )
 

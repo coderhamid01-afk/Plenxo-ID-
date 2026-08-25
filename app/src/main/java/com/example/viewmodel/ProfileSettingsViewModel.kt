@@ -93,14 +93,25 @@ class ProfileSettingsViewModel(application: Application) : AndroidViewModel(appl
                     if (profile != null) {
                         ProfileUiState.Success(profile)
                     } else {
-                        val defaultDisplayName = if (userEmail.contains("@")) userEmail.substringBefore("@") else "User"
+                        val local = com.example.util.SessionManager.getUserProfileLocally(getApplication())
+                        val resolvedName = local.displayName.ifBlank {
+                            auth.currentUser?.displayName ?: if (userEmail.contains("@")) userEmail.substringBefore("@") else "User"
+                        }
+                        val resolvedBio = local.bio.ifBlank { "" }
+                        val resolvedPic = local.profilePicUrl.ifBlank { auth.currentUser?.photoUrl?.toString() ?: "" }
+                        val resolvedPxId = local.plenxoId.ifBlank { "" }
                         ProfileUiState.Success(
                             UserProfileDomainModel(
                                 userId = resolvedUid,
                                 email = userEmail,
-                                name = defaultDisplayName,
-                                bio = "Hey there! I am using Plenxo.",
-                                profileUrl = auth.currentUser?.photoUrl?.toString() ?: ""
+                                name = resolvedName,
+                                displayName = resolvedName,
+                                bio = resolvedBio,
+                                statusMessage = resolvedBio,
+                                profileUrl = resolvedPic,
+                                profilePicUrl = resolvedPic,
+                                plenxoId = resolvedPxId,
+                                userCode = resolvedPxId
                             )
                         )
                     }

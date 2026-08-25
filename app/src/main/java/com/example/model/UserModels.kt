@@ -2,10 +2,66 @@ package com.example.model
 
 import android.util.Log
 import androidx.compose.runtime.Immutable
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
+
+data class UserDocReadResult(
+    val snapshot: com.google.firebase.firestore.DocumentSnapshot?,
+    val readConfirmed: Boolean
+)
+
+suspend fun fetchUserDocumentSafely(
+    uid: String,
+    firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    maxAttempts: Int = 3,
+    emailFallback: String? = null
+): UserDocReadResult {
+    if (uid.isBlank()) return UserDocReadResult(null, false)
+    val userDocRef = firestore.collection("users").document(uid)
+
+    for (attempt in 1..maxAttempts) {
+        try {
+            val snap = kotlinx.coroutines.withTimeoutOrNull(8000L) {
+                userDocRef.get().await()
+            }
+            if (snap != null && snap.exists()) {
+                return UserDocReadResult(snap, true)
+            } else if (snap != null && !snap.exists()) {
+                // If direct doc lookup by uid didn't find anything, try query by email or uid field
+                val targetEmail = emailFallback ?: com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+                if (!targetEmail.isNullOrBlank()) {
+                    val querySnap = kotlinx.coroutines.withTimeoutOrNull(6000L) {
+                        firestore.collection("users")
+                            .whereEqualTo("email", targetEmail.trim())
+                            .limit(1)
+                            .get()
+                            .await()
+                    }
+                    if (querySnap != null && !querySnap.isEmpty) {
+                        return UserDocReadResult(querySnap.documents[0], true)
+                    }
+                }
+                return UserDocReadResult(snap, true)
+            }
+        } catch (e: Exception) {
+            Log.w("PlenxoUserFetch", "Attempt $attempt failed reading users/$uid: ${e.message}")
+        }
+        try {
+            val cacheSnap = userDocRef.get(com.google.firebase.firestore.Source.CACHE).await()
+            if (cacheSnap.exists()) {
+                return UserDocReadResult(cacheSnap, true)
+            }
+        } catch (_: Exception) { /* cache miss, fall through */ }
+        if (attempt < maxAttempts) kotlinx.coroutines.delay(250L * attempt)
+    }
+    // Every attempt failed AND no cached copy existed
+    Log.w("PlenxoUserFetch", "Could not confirm users/$uid after $maxAttempts attempts.")
+    return UserDocReadResult(null, false)
+}
 
 @Serializable
 @Immutable
@@ -173,7 +229,14 @@ suspend fun resolveOrCreatePlenxoId(
         try {
             userDocRef.set(updateMap, com.google.firebase.firestore.SetOptions.merge()).await()
             val appCtx = com.example.PlenxoApplication.instance
-            com.example.util.SessionManager.saveUserProfileLocally(appCtx, plenxoId = normalized, displayName = "", bio = "", profilePicUrl = "")
+            val currentLocal = com.example.util.SessionManager.getUserProfileLocally(appCtx)
+            com.example.util.SessionManager.saveUserProfileLocally(
+                appCtx,
+                plenxoId = normalized,
+                displayName = currentLocal.displayName,
+                bio = currentLocal.bio,
+                profilePicUrl = currentLocal.profilePicUrl
+            )
         } catch (e: Exception) {
             Log.w("PlenxoIdResolver", "Warning: Failed to sync normalized Plenxo ID $normalized: ${e.message}")
         }
@@ -202,7 +265,14 @@ suspend fun resolveOrCreatePlenxoId(
     try {
         userDocRef.set(newMap, com.google.firebase.firestore.SetOptions.merge()).await()
         val appCtx = com.example.PlenxoApplication.instance
-        com.example.util.SessionManager.saveUserProfileLocally(appCtx, plenxoId = newPlenxoId, displayName = "", bio = "", profilePicUrl = "")
+        val currentLocal = com.example.util.SessionManager.getUserProfileLocally(appCtx)
+        com.example.util.SessionManager.saveUserProfileLocally(
+            appCtx,
+            plenxoId = newPlenxoId,
+            displayName = currentLocal.displayName,
+            bio = currentLocal.bio,
+            profilePicUrl = currentLocal.profilePicUrl
+        )
     } catch (e: Exception) {
         Log.w("PlenxoIdResolver", "Warning: Failed write for new ID $newPlenxoId: ${e.message}")
     }

@@ -17,9 +17,8 @@ import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.res.stringResource
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -198,11 +197,11 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
             targetState = currentScreen,
             transitionSpec = {
                 if (initialState == PlenxoScreen.LOGIN && targetState == PlenxoScreen.SIGNUP) {
-                    (slideInHorizontally(initialOffsetX = { it }, animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
-                    (slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
+                    (slideInVertically(initialOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
+                    (slideOutVertically(targetOffsetY = { -it / 3 }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
                 } else if (initialState == PlenxoScreen.SIGNUP && targetState == PlenxoScreen.LOGIN) {
-                    (slideInHorizontally(initialOffsetX = { -it }, animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
-                    (slideOutHorizontally(targetOffsetX = { it / 3 }, animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
+                    (slideInVertically(initialOffsetY = { -it / 3 }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
+                    (slideOutVertically(targetOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
                 } else if (targetState == PlenxoScreen.CHAT_DETAIL) {
                     (slideInHorizontally(initialOffsetX = { it }, animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(220))) togetherWith
                     (slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(220)))

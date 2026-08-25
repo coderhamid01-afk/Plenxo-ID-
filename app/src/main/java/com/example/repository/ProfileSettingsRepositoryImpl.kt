@@ -42,7 +42,67 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
         val docRef = firestore.collection("users").document(targetId)
         val listener = docRef.addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null || !snapshot.exists()) {
-                trySend(null)
+                val currentEmail = firebaseAuth.currentUser?.email
+                if (!currentEmail.isNullOrBlank()) {
+                    firestore.collection("users").whereEqualTo("email", currentEmail).limit(1).get()
+                        .addOnSuccessListener { querySnap ->
+                            if (!querySnap.isEmpty) {
+                                val d = querySnap.documents[0]
+                                val data = d.data ?: emptyMap()
+                                val resolvedDisplayName = (data["displayName"] as? String)
+                                    ?: (data["display_name"] as? String)
+                                    ?: (data["name"] as? String)
+                                    ?: (data["current_name"] as? String)
+                                    ?: (data["fullName"] as? String)
+                                    ?: ""
+                                val resolvedBio = (data["bio"] as? String)
+                                    ?: (data["statusMessage"] as? String)
+                                    ?: (data["current_bio"] as? String)
+                                    ?: (data["status_message"] as? String)
+                                    ?: (data["about"] as? String)
+                                    ?: (data["status"] as? String)
+                                    ?: ""
+                                val resolvedPicUrl = (data["profilePicUrl"] as? String)
+                                    ?: (data["profilePic"] as? String)
+                                    ?: (data["avatarUrl"] as? String)
+                                    ?: (data["avatar_url"] as? String)
+                                    ?: (data["photoUrl"] as? String)
+                                    ?: (data["profileUrl"] as? String)
+                                    ?: (data["current_profile_pic_url"] as? String)
+                                    ?: ""
+                                val resolvedEmail = (data["email"] as? String)?.takeIf { it.isNotBlank() } ?: currentEmail
+                                val resolvedPlenxoId = (data["plenxoId"] as? String)
+                                    ?: (data["plenxo_id"] as? String)
+                                    ?: (data["px_id"] as? String)
+                                    ?: (data["userCode"] as? String)
+                                    ?: (data["user_code"] as? String)
+                                    ?: ""
+                                val profile = UserProfileDomainModel(
+                                    id = d.id,
+                                    userId = targetId,
+                                    displayName = resolvedDisplayName,
+                                    name = resolvedDisplayName,
+                                    email = resolvedEmail,
+                                    statusMessage = resolvedBio,
+                                    bio = resolvedBio,
+                                    profilePicUrl = resolvedPicUrl,
+                                    profileUrl = resolvedPicUrl,
+                                    userCode = resolvedPlenxoId,
+                                    plenxoId = resolvedPlenxoId,
+                                    selectedRingId = (data["selectedRingId"] as? String) ?: "",
+                                    profileRingId = (data["profileRingId"] as? String) ?: ""
+                                )
+                                trySend(profile)
+                            } else {
+                                trySend(null)
+                            }
+                        }
+                        .addOnFailureListener {
+                            trySend(null)
+                        }
+                } else {
+                    trySend(null)
+                }
                 return@addSnapshotListener
             }
 
@@ -50,22 +110,30 @@ class ProfileSettingsRepositoryImpl : ProfileSettingsRepository {
             val resolvedDisplayName = (data["displayName"] as? String)
                 ?: (data["display_name"] as? String)
                 ?: (data["name"] as? String)
+                ?: (data["current_name"] as? String)
+                ?: (data["fullName"] as? String)
                 ?: ""
             val resolvedBio = (data["bio"] as? String)
                 ?: (data["statusMessage"] as? String)
+                ?: (data["current_bio"] as? String)
                 ?: (data["status_message"] as? String)
+                ?: (data["about"] as? String)
+                ?: (data["status"] as? String)
                 ?: ""
             val resolvedPicUrl = (data["profilePicUrl"] as? String)
+                ?: (data["profilePic"] as? String)
                 ?: (data["avatarUrl"] as? String)
                 ?: (data["avatar_url"] as? String)
                 ?: (data["photoUrl"] as? String)
                 ?: (data["profileUrl"] as? String)
+                ?: (data["current_profile_pic_url"] as? String)
                 ?: ""
             val resolvedEmail = (data["email"] as? String)?.takeIf { it.isNotBlank() }
                 ?: firebaseAuth.currentUser?.email
                 ?: ""
             val resolvedPlenxoId = (data["plenxoId"] as? String)
                 ?: (data["plenxo_id"] as? String)
+                ?: (data["px_id"] as? String)
                 ?: (data["userCode"] as? String)
                 ?: (data["user_code"] as? String)
                 ?: ""

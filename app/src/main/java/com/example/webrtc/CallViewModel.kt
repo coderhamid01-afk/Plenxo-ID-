@@ -222,6 +222,14 @@ class CallViewModel(application: Application) : AndroidViewModel(application), C
                 timeoutJob?.cancel()
                 if (startedAt == 0L) startedAt = System.currentTimeMillis()
                 startDurationTimer()
+                com.example.service.VoiceCallService.startService(
+                    getApplication(),
+                    callId,
+                    peerId,
+                    peerName,
+                    peerAvatar,
+                    if (isVideoCall) "Video" else "Audio"
+                )
             }
             "rejected", "ended", "timeout", "busy" -> {
                 stopRingback()
@@ -341,6 +349,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     private fun cleanup() {
+        try {
+            com.example.service.VoiceCallService.stopService(getApplication())
+        } catch (_: Exception) {}
         webRtcClient.close()
         repository.cleanup()
         callAudioManager.cleanup()

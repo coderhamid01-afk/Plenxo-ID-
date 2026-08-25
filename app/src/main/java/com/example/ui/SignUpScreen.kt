@@ -5,6 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -185,45 +187,74 @@ fun SignupScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Tab Switcher (Login / Signup)
-                    Row(
+                    // Tab Switcher (Login / Signup) with smooth liquid sliding indicator
+                    BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(48.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color.Black.copy(alpha = 0.3f))
+                            .background(Color(0xFF0F141C))
+                            .border(1.dp, Color(0xFF2A344A).copy(alpha = 0.6f), RoundedCornerShape(16.dp))
                             .padding(4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { viewModel.navigateToLogin() }
-                                .padding(vertical = 10.dp)
-                                .testTag("navigate_to_login"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Login",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        }
+                        val tabWidth = (maxWidth - 8.dp) / 2
+                        val indicatorOffset by animateDpAsState(
+                            targetValue = tabWidth,
+                            animationSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "tab_indicator_offset_signup"
+                        )
 
+                        // Animated Full Liquid Pill Indicator
                         Box(
                             modifier = Modifier
-                                .weight(1f)
+                                .offset(x = indicatorOffset)
+                                .width(tabWidth)
+                                .fillMaxHeight()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(primaryGradient)
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
+                                .border(0.5.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Sign Up",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { viewModel.navigateToLogin() }
+                                    .testTag("navigate_to_login"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Login",
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Sign Up",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
 

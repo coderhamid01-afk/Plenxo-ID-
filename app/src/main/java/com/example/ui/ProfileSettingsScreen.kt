@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -133,7 +134,68 @@ fun ProfileSettingsScreen(
     var showSetMasterPinDialog by remember { mutableStateOf(false) }
     var showDisable2FADialog by remember { mutableStateOf(false) }
     var showQRBottomSheet by remember { mutableStateOf(false) }
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     val is2FAEnabled by weChatViewModel.is2FAEnabled.collectAsState()
+
+    if (showLogoutConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmDialog = false },
+            containerColor = Color(0xFF1C2128),
+            shape = RoundedCornerShape(16.dp),
+            icon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = null,
+                    tint = dangerRed,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Log Out of Plenxo",
+                    fontWeight = FontWeight.Bold,
+                    color = textWhite,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to log out? You will need to sign in again to access your messages and active sessions.",
+                    color = textMuted,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirmDialog = false
+                        weChatViewModel.logout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = dangerRed),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("btn_confirm_logout")
+                ) {
+                    Text(
+                        text = "Log Out",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showLogoutConfirmDialog = false },
+                    border = androidx.compose.foundation.BorderStroke(1.dp, strokeBorder),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = textWhite)
+                ) {
+                    Text("Cancel", color = textWhite)
+                }
+            }
+        )
+    }
 
     if (showSetMasterPinDialog) {
         com.example.ui.components.SetMasterPinDialog(
@@ -295,10 +357,16 @@ fun ProfileSettingsScreen(
                     }
                 }
 
-                LaunchedEffect(profile) {
-                    if (nameInput.isBlank() && profile.name.isNotBlank()) nameInput = profile.name
-                    if (bioInput.isBlank() && profile.bio.isNotBlank()) bioInput = profile.bio
-                    if (profileUrlInput.isBlank() && profile.profileUrl.isNotBlank()) profileUrlInput = profile.profileUrl
+                LaunchedEffect(profile.name, profile.bio, profile.profileUrl) {
+                    if (profile.name.isNotBlank() && (nameInput.isBlank() || nameInput == "User" || nameInput.contains("@"))) {
+                        nameInput = profile.name
+                    }
+                    if (profile.bio.isNotBlank() && (bioInput.isBlank() || bioInput == "Hey there! I am using Plenxo.")) {
+                        bioInput = profile.bio
+                    }
+                    if (profile.profileUrl.isNotBlank() && profileUrlInput.isBlank()) {
+                        profileUrlInput = profile.profileUrl
+                    }
                 }
 
                 LaunchedEffect(newlyUploadedAvatarUrl) {
@@ -1265,31 +1333,63 @@ fun ProfileSettingsScreen(
                         }
                     }
 
+                    // LOG OUT BUTTON
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { showLogoutConfirmDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = dangerRed.copy(alpha = 0.15f),
+                                contentColor = dangerRed
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, dangerRed.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("btn_profile_logout")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = "Log Out",
+                                tint = dangerRed
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Log Out",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = dangerRed
+                            )
+                        }
+                    }
+
                     // DANGER ZONE / DELETE ACCOUNT BUTTON
                     item {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedButton(
                             onClick = { viewModel.initiateAccountDeletion() },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = dangerRed),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, dangerRed.copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = dangerRed.copy(alpha = 0.8f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, strokeBorder),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .testTag("btn_delete_account")
                         ) {
-                            Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, tint = dangerRed)
+                            Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, tint = dangerRed.copy(alpha = 0.8f))
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Delete Account",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = dangerRed
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = dangerRed.copy(alpha = 0.8f)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(36.dp))
+                        Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
             }
