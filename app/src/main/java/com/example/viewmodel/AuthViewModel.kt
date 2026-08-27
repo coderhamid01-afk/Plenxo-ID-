@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.PlenxoApplication
 import com.example.data.model.UserSecurityModel
 import com.example.data.repository.SecurityRepository
-import com.example.model.CaptchaStage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +37,6 @@ enum class ResetStep {
     EMAIL_OTP,
     SECURITY_PIN_VERIFY,
     MASTER_PIN_CHALLENGE,
-    CAPTCHA_VERIFY,
     SCANNING_TIMER,
     NEW_PASSWORD,
     SUCCESS
@@ -84,16 +82,7 @@ class AuthViewModel : ViewModel() {
     private val _uiEvent = MutableSharedFlow<AuthUiEvent>(extraBufferCapacity = 1)
     val uiEvent: SharedFlow<AuthUiEvent> = _uiEvent.asSharedFlow()
 
-    // Dual-Stage CAPTCHA & Terms StateFlows
-    private val _captchaStage = MutableStateFlow(CaptchaStage.LOCKED)
-    val captchaStage: StateFlow<CaptchaStage> = _captchaStage.asStateFlow()
-
     val isTermsAccepted = MutableStateFlow(false)
-
-    private val _textCaptchaCode = MutableStateFlow(generateRandomCaptchaCode())
-    val textCaptchaCode: StateFlow<String> = _textCaptchaCode.asStateFlow()
-
-    val textCaptchaInput = MutableStateFlow("")
 
     // Security & Password Reset StateFlows
     private val _currentResetStep = MutableStateFlow(ResetStep.IDLE)
@@ -204,38 +193,6 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    private fun generateRandomCaptchaCode(): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        return (1..6)
-            .map { chars[Random.nextInt(chars.length)] }
-            .joinToString("")
-    }
-
-    fun verifyStage1Text(): Boolean {
-        val input = textCaptchaInput.value.trim()
-        val code = _textCaptchaCode.value.trim()
-        return if (input.equals(code, ignoreCase = true)) {
-            _captchaStage.value = CaptchaStage.STAGE_1_CLEARED
-            true
-        } else {
-            textCaptchaInput.value = ""
-            _textCaptchaCode.value = generateRandomCaptchaCode()
-            _captchaStage.value = CaptchaStage.LOCKED
-            false
-        }
-    }
-
-    fun verifyStage2Slider(isAligned: Boolean) {
-        if (isAligned && _captchaStage.value == CaptchaStage.STAGE_1_CLEARED) {
-            _captchaStage.value = CaptchaStage.FULLY_VERIFIED
-        }
-    }
-
-    fun resetCaptcha() {
-        _captchaStage.value = CaptchaStage.LOCKED
-        textCaptchaInput.value = ""
-        _textCaptchaCode.value = generateRandomCaptchaCode()
-    }
 
     fun clearError() {
         _errorMessage.value = null
@@ -590,10 +547,6 @@ class AuthViewModel : ViewModel() {
             _errorMessage.value = _securityErrorMessage.value ?: "Account is locked due to 24-hour security violation."
             return
         }
-        if (_captchaStage.value != CaptchaStage.FULLY_VERIFIED) {
-            _errorMessage.value = "Please complete the dual-stage security verification."
-            return
-        }
         _isLoading.value = true
         _errorMessage.value = null
         viewModelScope.launch {
@@ -647,10 +600,6 @@ class AuthViewModel : ViewModel() {
             _errorMessage.value = "Please accept the Terms & Conditions to proceed."
             return
         }
-        if (_captchaStage.value != CaptchaStage.FULLY_VERIFIED) {
-            _errorMessage.value = "Please complete the dual-stage security verification."
-            return
-        }
         _isLoading.value = true
         _errorMessage.value = null
         viewModelScope.launch {
@@ -683,7 +632,6 @@ class AuthViewModel : ViewModel() {
         auth.signOut()
         _currentUser.value = null
         _uiState.value = AuthUiState.Idle
-        resetCaptcha()
         resetPasswordResetFlow()
     }
 }

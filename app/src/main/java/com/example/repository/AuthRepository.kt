@@ -7,6 +7,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import com.example.util.EmailUtils
 
 sealed class SignUpResult {
     data class Success(val userId: String, val email: String) : SignUpResult()
@@ -45,9 +46,8 @@ class AuthRepositoryImpl : AuthRepository {
         val cleanPassword = password.trim()
         val cleanDisplayName = displayName.trim()
 
-        val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$", RegexOption.IGNORE_CASE)
-        if (!gmailRegex.matches(cleanEmail)) {
-            return@withContext SignUpResult.Error(IllegalArgumentException("Registration is restricted exclusively to valid @gmail.com email addresses."))
+        if (!EmailUtils.isAllowedEmailDomain(cleanEmail)) {
+            return@withContext SignUpResult.Error(IllegalArgumentException(EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE))
         }
 
         return@withContext try {
@@ -102,9 +102,8 @@ class AuthRepositoryImpl : AuthRepository {
 
         return@withContext try {
             val resolvedEmail: String = if (input.contains("@")) {
-                val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$", RegexOption.IGNORE_CASE)
-                if (!gmailRegex.matches(input)) {
-                    return@withContext SignInResult.Error(IllegalArgumentException("Registration is restricted exclusively to valid @gmail.com email addresses."))
+                if (!EmailUtils.isAllowedEmailDomain(input)) {
+                    return@withContext SignInResult.Error(IllegalArgumentException(EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE))
                 }
                 input
             } else {

@@ -37,6 +37,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import android.util.Log
 import android.net.Uri
 import android.media.MediaPlayer
+import com.example.util.EmailUtils
 import com.example.util.SessionManager
 import com.example.util.OtpUtils
 import com.example.util.OtpRateLimiter
@@ -114,15 +115,13 @@ data class CallSession(
 )
 
 enum class PlenxoScreen {
+    PLACEHOLDER_ENTRY,
+    SIGN_UP,
     LOGIN,
-    SIGNUP,
-    FORGOT_PASSWORD,
-    OTP_VERIFICATION,
-    EMAIL_VERIFICATION_WAIT,
     WELCOME,
     PROFILE_SETUP,
-    AVATAR_SETUP,
-    FINAL_DETAILS,
+    OTP_VERIFICATION,
+    EMAIL_VERIFICATION_WAIT,
     PERMISSION_GATEWAY,
     HOME,
     CHAT_DETAIL,
@@ -193,47 +192,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     val simulatedCallDuration = MutableStateFlow(0L)
     private var simulatedCallJob: kotlinx.coroutines.Job? = null
 
-    // Dual-Stage CAPTCHA State Flows
-    private val _captchaStage = MutableStateFlow(com.example.model.CaptchaStage.LOCKED)
-    val captchaStage: StateFlow<com.example.model.CaptchaStage> = _captchaStage.asStateFlow()
-
-    private val _textCaptchaCode = MutableStateFlow(generateRandomCaptchaCode())
-    val textCaptchaCode: StateFlow<String> = _textCaptchaCode.asStateFlow()
-
-    val textCaptchaInput = MutableStateFlow("")
-
-    private fun generateRandomCaptchaCode(): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        return (1..6)
-            .map { chars[kotlin.random.Random.nextInt(chars.length)] }
-            .joinToString("")
-    }
-
-    fun verifyStage1Text(): Boolean {
-        val input = textCaptchaInput.value.trim()
-        val code = _textCaptchaCode.value.trim()
-        return if (input.equals(code, ignoreCase = true)) {
-            _captchaStage.value = com.example.model.CaptchaStage.STAGE_1_CLEARED
-            true
-        } else {
-            textCaptchaInput.value = ""
-            _textCaptchaCode.value = generateRandomCaptchaCode()
-            _captchaStage.value = com.example.model.CaptchaStage.LOCKED
-            false
-        }
-    }
-
-    fun verifyStage2Slider(isAligned: Boolean) {
-        if (isAligned && _captchaStage.value == com.example.model.CaptchaStage.STAGE_1_CLEARED) {
-            _captchaStage.value = com.example.model.CaptchaStage.FULLY_VERIFIED
-        }
-    }
-
-    fun resetCaptcha() {
-        _captchaStage.value = com.example.model.CaptchaStage.LOCKED
-        textCaptchaInput.value = ""
-        _textCaptchaCode.value = generateRandomCaptchaCode()
-    }
 
     // Onboarding / Profile States
     val selectedTheme = MutableStateFlow("Blue") // Choices: "Red", "Blue", "Purple", "Black", "Golden"
@@ -755,9 +713,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun navigateToScreen(screen: PlenxoScreen, addToHistory: Boolean = true, clearHistory: Boolean = false) {
         try {
-            if (screen == PlenxoScreen.PROFILE_SETUP) {
-                _authState.value = AuthState.NEEDS_PROFILE_SETUP
-            }
             synchronized(screenHistory) {
                 if (clearHistory) {
                     screenHistory.clear()
@@ -1454,7 +1409,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                     navigateToScreen(PlenxoScreen.OTP_VERIFICATION, addToHistory = false, clearHistory = true)
                                 } else if (!isSetupCompleted && fetchedName.isBlank() && fetchedCode.isBlank()) {
                                     _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                                    navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
+                                    navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                                 } else {
                                     _authState.value = AuthState.AUTHENTICATED
                                     observeCurrentUserProfile()
@@ -1469,7 +1424,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                 }
                             } else {
                                 _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                                navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
+                                navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                             }
                         }
                     } catch (e: Exception) {
@@ -1481,7 +1436,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             } else {
-                Log.d("Plenxo", "No authenticated user found on startup, showing LOGIN screen")
+                Log.d("Plenxo", "No authenticated user found on startup, showing Login screen")
                 _authState.value = AuthState.UNAUTHENTICATED
                 navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
             }
@@ -1508,13 +1463,13 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 checkAndRestoreSession()
             } else {
                 resetOtpState()
-        _currentScreen.value = PlenxoScreen.LOGIN
+                _currentScreen.value = PlenxoScreen.LOGIN
             }
             Log.d("PlenxoViewModel", "Crash recovery executed successfully.")
         } catch (e: Exception) {
             Log.e("PlenxoViewModel", "Error in handleCrashRecovery", e)
             resetOtpState()
-        _currentScreen.value = PlenxoScreen.LOGIN
+            _currentScreen.value = PlenxoScreen.LOGIN
         }
     }
 
@@ -2020,7 +1975,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
                 resetOtpState()
 
-                // Navigate instantly back to LoginScreen with backstack cleared
+                // Navigate instantly back to LOGIN with backstack cleared
                 navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
             }
         }
@@ -2031,10 +1986,9 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     fun navigateToSignup() {
         isPrivacyAccepted.value = false
         resetOtpState()
-        _currentScreen.value = PlenxoScreen.SIGNUP
+        _currentScreen.value = PlenxoScreen.SIGN_UP
         _errorMessage.value = null
         resetOtpState()
-        
     }
 
     fun navigateToLogin() {
@@ -2042,16 +1996,14 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         _currentScreen.value = PlenxoScreen.LOGIN
         _errorMessage.value = null
         resetOtpState()
-        
     }
 
     fun navigateToForgotPassword() {
         forgotPasswordInput.value = ""
         forgotPasswordErrorMessage.value = null
         forgotPasswordSuccessMessage.value = null
-        resetCaptcha()
         resetOtpState()
-        _currentScreen.value = PlenxoScreen.FORGOT_PASSWORD
+        _currentScreen.value = PlenxoScreen.LOGIN
     }
 
     fun completePasswordResetAndNavigateHome(userEmail: String, userId: String = "") {
@@ -2090,9 +2042,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             try {
                 val resolvedEmail: String = if (input.contains("@")) {
-                    val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$", RegexOption.IGNORE_CASE)
-                    if (!gmailRegex.matches(input)) {
-                        forgotPasswordErrorMessage.value = "Registration/Recovery is restricted exclusively to valid @gmail.com accounts."
+                    if (!EmailUtils.isAllowedEmailDomain(input)) {
+                        forgotPasswordErrorMessage.value = EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE
                         isForgotPasswordLoading.value = false
                         return@launch
                     }
@@ -2144,8 +2095,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 
                 // Start cooldown
                 startForgotPasswordCooldown()
-                // Reset captcha so it must be re-solved if they want to try again
-                resetCaptcha()
             } catch (e: Exception) {
                 Log.e("ForgotPassword", "Password Reset Error", e)
                 forgotPasswordErrorMessage.value = e.localizedMessage ?: "Failed to send password reset link."
@@ -2406,13 +2355,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     return@launch
                 }
 
-                if (_captchaStage.value != com.example.model.CaptchaStage.FULLY_VERIFIED) {
-                    _errorMessage.value = "Please complete the dual-stage security verification (Text CAPTCHA + Slider Puzzle)."
-                    _isLoading.value = false
-                    return@launch
-                }
-
-                // Auto-accept terms if user has verified CAPTCHA and clicked Login
                 isTermsAccepted.value = true
 
                 if (rawInput.isEmpty()) {
@@ -2427,9 +2369,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 val resolvedEmail: String = if (rawInput.contains("@")) {
-                    val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$", RegexOption.IGNORE_CASE)
-                    if (!gmailRegex.matches(rawInput)) {
-                        _errorMessage.value = "Registration and login are restricted exclusively to valid @gmail.com accounts or Plenxo IDs."
+                    if (!EmailUtils.isAllowedEmailDomain(rawInput)) {
+                        _errorMessage.value = EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE
                         _isLoading.value = false
                         return@launch
                     }
@@ -2849,10 +2790,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                     } catch (e: Throwable) {
                         _errorMessage.value = authEx.localizedMessage ?: "Authentication failed."
                     }
-                    // Only reset CAPTCHA if 3 or more attempts failed so user doesn't have to re-solve each retry
-                    if (attempts >= 3) {
-                        try { resetCaptcha() } catch (e: Throwable) {}
-                    }
                 }
             } catch (e: Throwable) {
                 Log.e("SUPABASE_AUTH", "Unhandled Login Exception Details: ", e)
@@ -2870,6 +2807,25 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun loginUser(emailInput: String, passwordInput: String) {
+        this.email.value = emailInput
+        this.password.value = passwordInput
+        onLoginClicked()
+    }
+
+    fun sendOtpForSignup(targetEmail: String, targetPassword: String) {
+        if (!EmailUtils.isAllowedEmailDomain(targetEmail)) {
+            _errorMessage.value = EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE
+            _isLoading.value = false
+            return
+        }
+        this.email.value = targetEmail
+        this.password.value = targetPassword
+        this.confirmPassword.value = targetPassword
+        this.isTermsAccepted.value = true
+        onSignUpClicked()
+    }
+
     fun onSignupClicked() = onSignUpClicked()
 
     fun onSignUpClicked() {
@@ -2881,17 +2837,12 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 val rawPassword = password.value
                 val rawConfirmPassword = confirmPassword.value
 
-                val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$", RegexOption.IGNORE_CASE)
-                if (_captchaStage.value != com.example.model.CaptchaStage.FULLY_VERIFIED) {
-                    _errorMessage.value = "Please complete the dual-stage security verification (Text CAPTCHA + Slider Puzzle)."
-                    return@launch
-                }
                 if (!isTermsAccepted.value) {
                     _errorMessage.value = "Please accept the Terms & Conditions to proceed."
                     return@launch
                 }
-                if (rawEmail.isEmpty() || !gmailRegex.matches(rawEmail)) {
-                    _errorMessage.value = "Registration is restricted exclusively to valid @gmail.com accounts."
+                if (rawEmail.isEmpty() || !EmailUtils.isAllowedEmailDomain(rawEmail)) {
+                    _errorMessage.value = EmailUtils.INVALID_DOMAIN_ERROR_MESSAGE
                     return@launch
                 }
                 if (rawPassword.isEmpty()) {
@@ -3315,13 +3266,12 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             auditSession()
                             registerE2EEKey()
                             startListeningForChats()
-                            com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
                             com.example.util.AppLockManager.setLocked(getApplication(), false)
                             observeCurrentUserProfile()
                             navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
                         } else if (readResult.readConfirmed && (userDoc == null || !userDoc.exists())) {
                             _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                            _currentScreen.value = PlenxoScreen.PROFILE_SETUP
+                            _currentScreen.value = PlenxoScreen.PLENXO_ID_REVEAL
                             if (uid.isNotEmpty()) {
                                 withContext(Dispatchers.IO) {
                                     try {
@@ -3354,8 +3304,8 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             }
                             _isLoading.value = false
                             _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                            _currentScreen.value = PlenxoScreen.WELCOME
-                            navigateToScreen(PlenxoScreen.WELCOME, addToHistory = false, clearHistory = true)
+                            _currentScreen.value = PlenxoScreen.PLENXO_ID_REVEAL
+                            navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                         } else {
                             val localProf = SessionManager.getUserProfileLocally(getApplication())
                             if (localProf.plenxoId.isNotBlank()) {
@@ -3379,7 +3329,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             auditSession()
                             registerE2EEKey()
                             startListeningForChats()
-                            com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
                             com.example.util.AppLockManager.setLocked(getApplication(), false)
                             observeCurrentUserProfile()
                             navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
@@ -3823,7 +3772,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         val currentUser = FirebaseAuth.getInstance().currentUser
         if (currentUser == null) {
             _authState.value = AuthState.UNAUTHENTICATED
-            navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
+            navigateToScreen(PlenxoScreen.OTP_VERIFICATION, addToHistory = false, clearHistory = true)
             return
         }
 
@@ -3859,32 +3808,32 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.Main) {
                     if (isSetupCompleted) {
                         _authState.value = AuthState.AUTHENTICATED
-                        if (_currentScreen.value == PlenxoScreen.LOGIN || _currentScreen.value == PlenxoScreen.PROFILE_SETUP) {
+                        if (_currentScreen.value == PlenxoScreen.OTP_VERIFICATION || _currentScreen.value == PlenxoScreen.PLACEHOLDER_ENTRY) {
                             navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
                         }
                     } else {
                         _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                        navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
+                        navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                     }
                 }
             } catch (e: Exception) {
                 Log.e("Plenxo", "Error verifying profile setup status: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                    navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
+                    navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
                 }
             }
         }
     }
 
     fun navigateToAvatarSetup() {
-        _currentScreen.value = PlenxoScreen.AVATAR_SETUP
+        _currentScreen.value = PlenxoScreen.PLENXO_ID_REVEAL
     }
 
     fun navigateToFinalDetails() {
         val numericCode = plenxoId.value.removePrefix("PX-").ifBlank { "000000" }
         userCode.value = numericCode
-        _currentScreen.value = PlenxoScreen.FINAL_DETAILS
+        _currentScreen.value = PlenxoScreen.PLENXO_ID_REVEAL
     }
 
     fun onFinishSetupClicked() {
@@ -3991,7 +3940,6 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 // Only navigate AFTER confirmed Firestore write
                 SessionManager.saveLoginState(getApplication(), currentUid, email.value.trim())
                 startListeningForChats()
-                com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
                 com.example.util.AppLockManager.setLocked(getApplication(), false)
                 navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
 
@@ -4029,7 +3977,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
         }
         
         resetOtpState()
-        _currentScreen.value = PlenxoScreen.SIGNUP
+        _currentScreen.value = PlenxoScreen.OTP_VERIFICATION
     }
 
     // Helper to resend OTP
@@ -4092,11 +4040,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
 
                 viewModelScope.launch(Dispatchers.IO) {
                     try {
-                        val purpose = when {
-                            _currentScreen.value == PlenxoScreen.FORGOT_PASSWORD -> "forgot_password"
-                            _currentScreen.value == PlenxoScreen.LOGIN -> "login"
-                            else -> "signup"
-                        }
+                        val purpose = "otp_verification"
                         requestNetlifyOtp(rawEmail, purpose = purpose, clientOtp = newOtp)
                     } catch (e: Throwable) {
                         Log.e("PlenxoOtp", "Async resend Netlify OTP dispatch error: ${e.message}")

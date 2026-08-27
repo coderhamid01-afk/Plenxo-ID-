@@ -147,7 +147,7 @@ class MainActivity : BaseActivity() {
                     LaunchedEffect(activeIntent) {
                         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
                         if (currentUser == null) {
-                            if (currentScreen != PlenxoScreen.LOGIN && currentScreen != PlenxoScreen.SIGNUP && currentScreen != PlenxoScreen.FORGOT_PASSWORD) {
+                            if (currentScreen != PlenxoScreen.LOGIN && currentScreen != PlenxoScreen.SIGN_UP) {
                                 viewModel.navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
                             }
                             return@LaunchedEffect

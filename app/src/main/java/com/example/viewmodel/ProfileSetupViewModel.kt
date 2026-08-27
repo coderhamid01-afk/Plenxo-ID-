@@ -176,6 +176,17 @@ class ProfileSetupViewModel : ViewModel() {
 
                     val userEmail = auth.currentUser?.email ?: ""
                     val formattedDob = DateUtils.formatDateForFirestore(dobMillis.value)
+                    val dob = dobMillis.value
+                    val calculatedAgeInt = if (dob != null && dob > 0L) {
+                        val dobCal = java.util.Calendar.getInstance().apply { timeInMillis = dob }
+                        val today = java.util.Calendar.getInstance()
+                        var age = today.get(java.util.Calendar.YEAR) - dobCal.get(java.util.Calendar.YEAR)
+                        if (today.get(java.util.Calendar.DAY_OF_YEAR) < dobCal.get(java.util.Calendar.DAY_OF_YEAR)) {
+                            age--
+                        }
+                        if (age < 0) 0 else age
+                    } else 0
+
                     val existingPicUrl = existingSnap?.getString("profilePicUrl") 
                         ?: existingSnap?.getString("avatar_url") 
                         ?: existingSnap?.getString("photoUrl") 
@@ -196,6 +207,7 @@ class ProfileSetupViewModel : ViewModel() {
                         "statusMessage" to finalBio,
                         "dateOfBirth" to formattedDob,
                         "dobTimestamp" to (dobMillis.value ?: 0L),
+                        "age" to calculatedAgeInt,
                         "gender" to selectedGender.value,
                         "language" to selectedLanguage.value.name,
                         "languageCode" to selectedLanguage.value.code,
@@ -211,6 +223,7 @@ class ProfileSetupViewModel : ViewModel() {
                         "user_code" to numericCode,
                         "px_id" to existingPlenxoId,
                         "px_code" to numericCode,
+                        "isProfileCompleted" to true,
                         "isProfileSetupCompleted" to true,
                         "isProfileSetup" to true,
                         "profileSetupCompleted" to true,

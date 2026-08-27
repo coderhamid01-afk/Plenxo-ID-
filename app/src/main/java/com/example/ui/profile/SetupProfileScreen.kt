@@ -502,39 +502,88 @@ fun SetupProfileScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Date of Birth Field
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                OutlinedTextField(
-                                    value = DateUtils.formatDateToDisplay(dobMillis),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Date of Birth", color = Color.White.copy(alpha = 0.7f)) },
-                                    trailingIcon = {
-                                        Icon(
-                                            Icons.Default.CalendarToday,
-                                            contentDescription = "Select Date",
-                                            tint = PlenxoCyan
-                                        )
-                                    },
+                            // Date of Birth Field & Live Age Detection Box
+                            val calculatedAge = remember(dobMillis) {
+                                val dob = dobMillis
+                                if (dob != null && dob > 0L) {
+                                    val dobCal = java.util.Calendar.getInstance().apply { timeInMillis = dob }
+                                    val today = java.util.Calendar.getInstance()
+                                    var age = today.get(java.util.Calendar.YEAR) - dobCal.get(java.util.Calendar.YEAR)
+                                    if (today.get(java.util.Calendar.DAY_OF_YEAR) < dobCal.get(java.util.Calendar.DAY_OF_YEAR)) {
+                                        age--
+                                    }
+                                    if (age < 0) 0 else age
+                                } else 0
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedTextField(
+                                        value = DateUtils.formatDateToDisplay(dobMillis),
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("Date of Birth", color = Color.White.copy(alpha = 0.7f)) },
+                                        trailingIcon = {
+                                            Icon(
+                                                Icons.Default.CalendarToday,
+                                                contentDescription = "Select Date",
+                                                tint = PlenxoCyan
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = DarkSurface.copy(alpha = 0.6f),
+                                            unfocusedContainerColor = DarkSurface.copy(alpha = 0.4f),
+                                            focusedBorderColor = PlenxoCyan,
+                                            unfocusedBorderColor = DarkCardBorder,
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showDatePicker = true }
+                                            .testTag("dob_input")
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clickable { showDatePicker = true }
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Surface(
+                                    modifier = Modifier
+                                        .height(56.dp)
+                                        .width(88.dp)
+                                        .testTag("age_detection_box"),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = DarkSurface.copy(alpha = 0.6f),
-                                        unfocusedContainerColor = DarkSurface.copy(alpha = 0.4f),
-                                        focusedBorderColor = PlenxoCyan,
-                                        unfocusedBorderColor = DarkCardBorder,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showDatePicker = true }
-                                        .testTag("dob_input")
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .clickable { showDatePicker = true }
-                                )
+                                    color = PlenxoPurple.copy(alpha = 0.2f),
+                                    border = BorderStroke(1.dp, PlenxoCyan.copy(alpha = 0.5f))
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Text(
+                                            text = "AGE",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PlenxoCyan
+                                        )
+                                        Text(
+                                            text = if (calculatedAge > 0) "$calculatedAge yrs" else "--",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))

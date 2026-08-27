@@ -274,15 +274,6 @@ object SessionManager {
         return getEncryptedPrefs(context)?.getBoolean(KEY_BLOCK_SCREENSHOTS, false) ?: false
     }
 
-    private var captchaVerifiedInMemory = false
-
-    fun saveCaptchaVerified(context: Context, verified: Boolean) {
-        captchaVerifiedInMemory = verified
-    }
-
-    fun isCaptchaVerified(context: Context): Boolean {
-        return captchaVerifiedInMemory
-    }
 
     fun saveAppLockType(context: Context, type: String) {
         getEncryptedPrefs(context)?.edit()?.putString(KEY_APPLOCK_TYPE, type)?.apply()

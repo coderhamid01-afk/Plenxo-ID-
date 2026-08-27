@@ -96,9 +96,6 @@ open class BaseActivity : AppCompatActivity() {
         }
 
         if (AppLockManager.isLocked(this)) {
-            if (SessionManager.isCaptchaVerified(this)) {
-                return
-            }
             val intent = android.content.Intent(this, UnlockActivity::class.java).apply {
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }

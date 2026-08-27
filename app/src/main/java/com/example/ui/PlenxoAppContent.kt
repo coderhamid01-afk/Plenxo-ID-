@@ -1,6 +1,11 @@
 @file:Suppress("DEPRECATION")
 package com.example.ui
 
+import com.example.ui.screens.auth.SignUpScreen
+import com.example.ui.screens.auth.LoginScreen
+import com.example.ui.screens.auth.WelcomeScreen
+import com.example.ui.profile.SetupProfileScreen
+
 import androidx.compose.ui.res.stringResource
 import com.example.R
 
@@ -76,7 +81,6 @@ import com.example.viewmodel.NormalSettingsViewModel
 import com.example.viewmodel.ProfileSettingsViewModel
 import com.example.ui.NormalSettingsScreen
 import com.example.ui.ProfileSettingsScreen
-import com.example.ui.screens.ProfileSetupScreen
 import com.example.ui.profile.SetupProfileScreen
 import com.example.ui.profile.PlenxoIdRevealScreen
 import com.example.viewmodel.ProfileSetupViewModel
@@ -167,15 +171,8 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
     )
 
     // Global Back Handler
-    androidx.activity.compose.BackHandler(enabled = currentScreen != PlenxoScreen.HOME && currentScreen != PlenxoScreen.LOGIN) {
-        if (currentScreen == PlenxoScreen.PROFILE_SETUP || currentScreen == PlenxoScreen.AVATAR_SETUP || currentScreen == PlenxoScreen.FINAL_DETAILS) {
-            // User backing out of profile setup: account is already securely persisted in Firestore with permanent Plenxo ID
-            if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
-                viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
-            } else {
-                viewModel.navigateToScreen(PlenxoScreen.LOGIN, addToHistory = false, clearHistory = true)
-            }
-        } else if (!viewModel.navigateBack()) {
+    androidx.activity.compose.BackHandler(enabled = currentScreen != PlenxoScreen.HOME && currentScreen != PlenxoScreen.LOGIN && currentScreen != PlenxoScreen.SIGN_UP && currentScreen != PlenxoScreen.OTP_VERIFICATION) {
+        if (!viewModel.navigateBack()) {
             if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
                 viewModel.navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
             } else {
@@ -203,13 +200,7 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
         androidx.compose.animation.AnimatedContent(
             targetState = currentScreen,
             transitionSpec = {
-                if (initialState == PlenxoScreen.LOGIN && targetState == PlenxoScreen.SIGNUP) {
-                    (slideInVertically(initialOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
-                    (slideOutVertically(targetOffsetY = { -it / 3 }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
-                } else if (initialState == PlenxoScreen.SIGNUP && targetState == PlenxoScreen.LOGIN) {
-                    (slideInVertically(initialOffsetY = { -it / 3 }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(400))) togetherWith
-                    (slideOutVertically(targetOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(400)))
-                } else if (targetState == PlenxoScreen.CHAT_DETAIL) {
+                if (targetState == PlenxoScreen.CHAT_DETAIL) {
                     (slideInHorizontally(initialOffsetX = { it }, animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(220))) togetherWith
                     (slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(220)))
                 } else if (initialState == PlenxoScreen.CHAT_DETAIL) {
@@ -224,16 +215,38 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
             label = "screen_transition"
         ) { screen ->
             when (screen) {
-            PlenxoScreen.LOGIN -> {
-                LoginScreen(
-                    viewModel = viewModel, 
-                    primaryColor = primaryColor
+            PlenxoScreen.PLACEHOLDER_ENTRY -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = primaryColor)
+                }
+            }
+            PlenxoScreen.SIGN_UP -> {
+                SignUpScreen(
+                    viewModel = viewModel,
+                    onNavigateToLogin = { viewModel.navigateToScreen(PlenxoScreen.LOGIN) }
                 )
             }
-            PlenxoScreen.SIGNUP -> {
-                SignupScreen(
-                    viewModel = viewModel, 
-                    primaryColor = primaryColor
+            PlenxoScreen.LOGIN -> {
+                LoginScreen(
+                    viewModel = viewModel,
+                    onNavigateToSignUp = { viewModel.navigateToScreen(PlenxoScreen.SIGN_UP) }
+                )
+            }
+            PlenxoScreen.WELCOME -> {
+                WelcomeScreen(
+                    onNavigateToProfileSetup = { viewModel.navigateToScreen(PlenxoScreen.PROFILE_SETUP) }
+                )
+            }
+            PlenxoScreen.PROFILE_SETUP -> {
+                SetupProfileScreen(
+                    onSetupSuccess = { plenxoId ->
+                        viewModel.setRevealedPlenxoId(plenxoId)
+                        viewModel.navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
+                    },
+                    mainViewModel = viewModel
                 )
             }
             PlenxoScreen.OTP_VERIFICATION -> {
@@ -242,23 +255,7 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
             PlenxoScreen.EMAIL_VERIFICATION_WAIT -> {
                 EmailVerificationWaitingScreen(
                     email = viewModel.email.value,
-                    onNavigateBack = { viewModel.navigateToScreen(PlenxoScreen.LOGIN) }
-                )
-            }
-            PlenxoScreen.WELCOME -> {
-                WelcomeScreen(viewModel = viewModel, primaryColor = primaryColor)
-            }
-            PlenxoScreen.PROFILE_SETUP, PlenxoScreen.AVATAR_SETUP, PlenxoScreen.FINAL_DETAILS -> {
-                ProfileSetupScreen(
-                    viewModel = viewModel,
-                    onSetupComplete = {
-                        viewModel.setAuthState(com.example.model.AuthState.AUTHENTICATED)
-                        val idToReveal = viewModel.plenxoId.value.ifBlank { viewModel.revealedPlenxoId.value }
-                        if (idToReveal.isNotBlank()) {
-                            viewModel.setRevealedPlenxoId(idToReveal)
-                        }
-                        viewModel.navigateToScreen(PlenxoScreen.PLENXO_ID_REVEAL, addToHistory = false, clearHistory = true)
-                    }
+                    onNavigateBack = { viewModel.navigateToScreen(PlenxoScreen.OTP_VERIFICATION) }
                 )
             }
             PlenxoScreen.PLENXO_ID_REVEAL -> {
@@ -404,9 +401,6 @@ fun PlenxoAppContent(viewModel: PlenxoViewModel, permissionManager: PermissionMa
                         onBack = { viewModel.navigateBack() }
                     )
                 }
-            }
-            PlenxoScreen.FORGOT_PASSWORD -> {
-                ForgotPasswordScreen(viewModel = viewModel, primaryColor = primaryColor)
             }
             PlenxoScreen.CALL_HISTORY -> {
                 CallHistoryScreen(viewModel = viewModel, onBack = { viewModel.navigateBack() })
@@ -668,95 +662,6 @@ fun TermsAndPrivacyCheckboxRow(
                 .weight(1f)
                 .testTag("terms_checkbox_text")
         )
-    }
-}
-
-// TASK 1: PREMIUM WELCOME PAGE
-@Composable
-fun WelcomeScreen(viewModel: PlenxoViewModel, primaryColor: Color) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // Welcome Celebration Graphic Logo
-        Box(
-            modifier = Modifier
-                .size(110.dp)
-                .background(primaryColor.copy(alpha = 0.12f), shape = CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Celebration,
-                contentDescription = "Welcome Celebration Graphic",
-                tint = primaryColor,
-                modifier = Modifier.size(58.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(stringResource(id = R.string.str_welcome_to_plenxo),
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Black,
-            color = Color.Black,
-            textAlign = TextAlign.Center,
-            letterSpacing = (-0.5).sp
-        )
-
-        Text(stringResource(id = R.string.str_connect_share_and_secure_your),
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            color = primaryColor,
-            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
-            textAlign = TextAlign.Center
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(24.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Text(stringResource(id = R.string.str_experience_seamless_communication_with_top),
-                fontSize = 15.sp,
-                color = Color.DarkGray,
-                lineHeight = 24.sp,
-                modifier = Modifier.padding(24.dp),
-                textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Button(
-            onClick = {
-                viewModel.navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp)
-                .testTag("welcome_next_button"),
-            shape = RoundedCornerShape(29.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = primaryColor,
-                contentColor = Color.White
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-        ) {
-            Text(
-                text = "Next",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
     }
 }
 
