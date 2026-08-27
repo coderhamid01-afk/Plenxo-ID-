@@ -163,14 +163,6 @@
         </service>
 
         <service
-            android:name=".service.PlenxoFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-        <service
             android:name=".service.AppNotificationService"
             android:exported="false">
         </service>

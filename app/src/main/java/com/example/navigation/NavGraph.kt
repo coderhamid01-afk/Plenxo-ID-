@@ -29,7 +29,7 @@ fun PlenxoNavGraph(
     val authState by viewModel.authState.collectAsState()
 
     // Synchronize screen navigation with AuthState lifecycle
-    androidx.compose.runtime.LaunchedEffect(authState) {
+    androidx.compose.runtime.LaunchedEffect(authState, currentScreen) {
         when (authState) {
             AuthState.UNAUTHENTICATED -> {
                 if (currentScreen != PlenxoScreen.LOGIN &&
@@ -40,7 +40,13 @@ fun PlenxoNavGraph(
                 }
             }
             AuthState.VERIFYING_OTP -> {
-                if (currentScreen != PlenxoScreen.OTP_VERIFICATION) {
+                if (currentScreen != PlenxoScreen.OTP_VERIFICATION &&
+                    currentScreen != PlenxoScreen.PROFILE_SETUP &&
+                    currentScreen != PlenxoScreen.AVATAR_SETUP &&
+                    currentScreen != PlenxoScreen.FINAL_DETAILS &&
+                    currentScreen != PlenxoScreen.PLENXO_ID_REVEAL &&
+                    currentScreen != PlenxoScreen.WELCOME
+                ) {
                     viewModel.navigateToScreen(PlenxoScreen.OTP_VERIFICATION, addToHistory = false, clearHistory = true)
                 }
             }

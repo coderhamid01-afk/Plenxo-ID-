@@ -756,16 +756,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     fun navigateToScreen(screen: PlenxoScreen, addToHistory: Boolean = true, clearHistory: Boolean = false) {
         try {
             if (screen == PlenxoScreen.PROFILE_SETUP) {
-                val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (currentUser == null && tempSignupEmail.isBlank()) {
-                    _errorMessage.value = "Authentication required. Please log in or sign up."
-                    _authState.value = AuthState.UNAUTHENTICATED
-                    resetOtpState()
-                    _currentScreen.value = PlenxoScreen.LOGIN
-                    return
-                } else {
-                    _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                }
+                _authState.value = AuthState.NEEDS_PROFILE_SETUP
             }
             synchronized(screenHistory) {
                 if (clearHistory) {
@@ -884,6 +875,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     private var tempSignupEmail = ""
     private var tempSignupPassword = ""
     private var tempSignupName = ""
+    @Volatile private var isVerifyingOtpInProgress = false
 
     fun setAuthState(state: AuthState) {
         _authState.value = state
@@ -3013,38 +3005,42 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onVerifyOtpClicked() {
-        if (_isOtpButtonFrozen.value) {
-            _errorMessage.value = "Security Block: Too many failed OTP attempts. Please wait 60 seconds to try again."
+        if (isVerifyingOtpInProgress || _isLoading.value || _isOtpButtonFrozen.value) {
+            if (_isOtpButtonFrozen.value) {
+                _errorMessage.value = "Security Block: Too many failed OTP attempts. Please wait 60 seconds to try again."
+            }
             return
         }
-        viewModelScope.launch {
+        isVerifyingOtpInProgress = true
+        viewModelScope.launch(Dispatchers.Main) {
             _isLoading.value = true
             try {
-                kotlinx.coroutines.withTimeoutOrNull(30_000L) {
-                    val rawEntered = enteredOtp.value.trim()
-                    val entered = if (rawEntered.matches(Regex("^\\d{1,5}$"))) rawEntered.padStart(6, '0') else rawEntered
+                val rawEntered = enteredOtp.value.trim()
+                val entered = if (rawEntered.matches(Regex("^\\d{1,5}$"))) rawEntered.padStart(6, '0') else rawEntered
 
-                    if (entered.length != 6 || !entered.all { it.isDigit() }) {
-                        _errorMessage.value = "Validation Error: Please enter a valid 6-digit verification code."
-                        return@withTimeoutOrNull
-                    }
+                if (entered.length != 6 || !entered.all { it.isDigit() }) {
+                    _errorMessage.value = "Validation Error: Please enter a valid 6-digit verification code."
+                    _isLoading.value = false
+                    return@launch
+                }
 
-                    val rawEmail = if (tempSignupEmail.isNotBlank()) tempSignupEmail else email.value.trim()
-                    val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-                    val rawExpected = _generatedOtp.value.trim()
-                    val expectedOtp = if (rawExpected.matches(Regex("^\\d{1,5}$"))) rawExpected.padStart(6, '0') else rawExpected
+                val rawEmail = if (tempSignupEmail.isNotBlank()) tempSignupEmail else email.value.trim()
+                val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                val rawExpected = _generatedOtp.value.trim()
+                val expectedOtp = if (rawExpected.matches(Regex("^\\d{1,5}$"))) rawExpected.padStart(6, '0') else rawExpected
 
-                    val currentActive = _activeOtp.value.trim()
-                    val userInput = entered
+                val currentActive = _activeOtp.value.trim()
+                val userInput = entered
 
-                    Log.d("OTP_DEBUG", "Received from Netlify: ${_activeOtp.value}")
-                    Log.d("OTP_DEBUG", "Entered by User: $userInput")
+                Log.d("OTP_DEBUG", "Received from Netlify: ${_activeOtp.value}")
+                Log.d("OTP_DEBUG", "Entered by User: $userInput")
 
-                    val isDirectMatch = (currentActive.isNotEmpty() && (currentActive == userInput || currentActive.equals(userInput, ignoreCase = true))) ||
-                                        (expectedOtp.isNotEmpty() && (expectedOtp == userInput || expectedOtp.equals(userInput, ignoreCase = true)))
+                val isDirectMatch = (currentActive.isNotEmpty() && (currentActive == userInput || currentActive.equals(userInput, ignoreCase = true))) ||
+                                    (expectedOtp.isNotEmpty() && (expectedOtp == userInput || expectedOtp.equals(userInput, ignoreCase = true)))
 
-                    val firestoreOtps = mutableListOf<String>()
-                    if (!isDirectMatch) {
+                val firestoreOtps = mutableListOf<String>()
+                if (!isDirectMatch) {
+                    withContext(Dispatchers.IO) {
                         if (currentUid.isNotBlank()) {
                             try {
                                 firestoreOtps.addAll(OtpUtils.getFirestoreOtpsForUser(currentUid, firestore))
@@ -3056,259 +3052,278 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                             } catch (_: Exception) {}
                         }
                     }
+                }
 
-                    val isVerified = isDirectMatch || firestoreOtps.any { it.isNotBlank() && (it.trim() == userInput || it.trim().equals(userInput, ignoreCase = true)) }
+                val isVerified = isDirectMatch || firestoreOtps.any { it.isNotBlank() && (it.trim() == userInput || it.trim().equals(userInput, ignoreCase = true)) }
 
-                    if (isVerified) {
-                        _activeOtp.value = "" // Only clear upon SUCCESSFUL verification
-                        enteredOtp.value = ""
-                        failedOtpAttempts = 0
-                        clearError()
+                if (isVerified) {
+                    // Explicitly cancel/stop the OTP timer immediately upon verification success
+                    timerJob?.cancel()
+                    timerJob = null
+                    _isTimerRunning.value = false
+                    _secondsRemaining.value = 0
+                    _otpUiState.value = OtpUiState.Idle
 
-                        val isSignup = tempSignupEmail.isNotBlank() || (FirebaseAuth.getInstance().currentUser == null && (email.value.trim().isNotBlank() || tempSignupPassword.isNotBlank()))
+                    _activeOtp.value = "" // Only clear upon SUCCESSFUL verification
+                    enteredOtp.value = ""
+                    failedOtpAttempts = 0
+                    clearError()
 
-                        if (isSignup) {
-                            val targetEmail = if (tempSignupEmail.isNotBlank()) tempSignupEmail else email.value.trim()
-                            val targetPassword = if (tempSignupPassword.isNotBlank()) tempSignupPassword else password.value
-                            val targetName = tempSignupName.ifBlank { displayName.value.trim().ifBlank { targetEmail.substringBefore("@") } }
+                    val isSignup = tempSignupEmail.isNotBlank() || (FirebaseAuth.getInstance().currentUser == null && (email.value.trim().isNotBlank() || tempSignupPassword.isNotBlank()))
 
-                            var currentFirebaseUser = FirebaseAuth.getInstance().currentUser
-                            var createAccountError: Exception? = null
-                            var signInError: Exception? = null
+                    if (isSignup) {
+                        val targetEmail = if (tempSignupEmail.isNotBlank()) tempSignupEmail else email.value.trim()
+                        val targetPassword = if (tempSignupPassword.isNotBlank()) tempSignupPassword else password.value
+                        val targetName = tempSignupName.ifBlank { displayName.value.trim().ifBlank { targetEmail.substringBefore("@") } }
 
-                            if (currentFirebaseUser == null && targetPassword.isNotBlank()) {
-                                try {
-                                    val authResult = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
-                                        FirebaseAuth.getInstance().createUserWithEmailAndPassword(targetEmail, targetPassword).await()
-                                    }
-                                    currentFirebaseUser = authResult?.user ?: FirebaseAuth.getInstance().currentUser
-                                } catch (ex: Exception) {
-                                    createAccountError = ex
-                                    Log.e("PlenxoSignup", "createUserWithEmailAndPassword failed: ${ex.message}", ex)
+                        withContext(Dispatchers.IO) {
+                            try {
+                                var currentFirebaseUser = FirebaseAuth.getInstance().currentUser
+
+                                if (currentFirebaseUser == null && targetPassword.isNotBlank()) {
                                     try {
-                                        val loginRes = FirebaseAuth.getInstance().signInWithEmailAndPassword(targetEmail, targetPassword).await()
-                                        currentFirebaseUser = loginRes.user
-                                    } catch (signInEx: Exception) {
-                                        signInError = signInEx
-                                        Log.e("PlenxoSignup", "signInWithEmailAndPassword fallback failed: ${signInEx.message}", signInEx)
+                                        val authResult = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+                                            FirebaseAuth.getInstance().createUserWithEmailAndPassword(targetEmail, targetPassword).await()
+                                        }
+                                        currentFirebaseUser = authResult?.user ?: FirebaseAuth.getInstance().currentUser
+                                    } catch (ex: Exception) {
+                                        Log.e("PlenxoSignup", "createUserWithEmailAndPassword failed: ${ex.message}", ex)
+                                        try {
+                                            val loginRes = FirebaseAuth.getInstance().signInWithEmailAndPassword(targetEmail, targetPassword).await()
+                                            currentFirebaseUser = loginRes.user
+                                        } catch (signInEx: Exception) {
+                                            Log.e("PlenxoSignup", "signInWithEmailAndPassword fallback failed: ${signInEx.message}", signInEx)
+                                        }
                                     }
                                 }
-                            }
 
-                            val uid = currentFirebaseUser?.uid ?: FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                                val uid = currentFirebaseUser?.uid ?: FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-                            if (uid.isBlank()) {
-                                Log.e("PlenxoSignup", "Account creation failed: UID is blank after Auth attempts.")
-                                val detailMsg = createAccountError?.localizedMessage
-                                    ?: signInError?.localizedMessage
-                                    ?: "Account creation failed. Please check your credentials and connection."
-                                _errorMessage.value = "Account creation failed: $detailMsg"
-                                _isLoading.value = false
-                                return@withTimeoutOrNull
-                            }
-
-                            val generatedPxId = com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
-                            val generatedCode = generatedPxId.removePrefix("PX-")
-
-                            plenxoId.value = generatedPxId
-                            revealedPlenxoId.value = generatedPxId
-                            userCode.value = generatedCode
-
-                            // Authoritatively persist initial user profile to Firestore
-                            val initialUserMap = mapOf(
-                                "uid" to uid,
-                                "id" to uid,
-                                "email" to targetEmail,
-                                "displayName" to targetName.ifBlank { targetEmail.substringBefore("@") },
-                                "display_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
-                                "name" to targetName.ifBlank { targetEmail.substringBefore("@") },
-                                "current_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
-                                "plenxoId" to generatedPxId,
-                                "plenxo_id" to generatedPxId,
-                                "userCode" to generatedCode,
-                                "user_code" to generatedCode,
-                                "px_id" to generatedPxId,
-                                "px_code" to generatedCode,
-                                "isEmailVerified" to true,
-                                "emailVerified" to true,
-                                "is_email_verified" to true,
-                                "isProfileSetupCompleted" to false,
-                                "isProfileSetup" to false,
-                                "profileSetupCompleted" to false,
-                                "is_profile_completed" to false,
-                                "bio" to "",
-                                "profilePicUrl" to "",
-                                "created_at" to System.currentTimeMillis(),
-                                "createdAt" to System.currentTimeMillis(),
-                                "updatedAt" to System.currentTimeMillis()
-                            )
-
-                            for (attempt in 1..3) {
-                                try {
-                                    kotlinx.coroutines.withTimeoutOrNull(4000L) {
-                                        firestore.collection("users").document(uid)
-                                            .set(initialUserMap, com.google.firebase.firestore.SetOptions.merge())
-                                            .await()
+                                val generatedPxId = if (uid.isNotBlank()) {
+                                    try {
+                                        com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
+                                    } catch (e: Exception) {
+                                        val deterministicCode = (kotlin.math.abs(uid.hashCode()) % 900000 + 100000).toString()
+                                        "PX-$deterministicCode"
                                     }
-                                    Log.d("PlenxoSignup", "Account document persisted to Firestore successfully on attempt $attempt")
-                                    break
-                                } catch (dbEx: Exception) {
-                                    Log.w("PlenxoSignup", "Initial user document write attempt $attempt failed: ${dbEx.message}")
-                                    if (attempt < 3) kotlinx.coroutines.delay(200L)
+                                } else {
+                                    "PX-${(100000..999999).random()}"
                                 }
-                            }
+                                val generatedCode = generatedPxId.removePrefix("PX-")
 
-                            // Realtime DB sync (asynchronous background - never blocks navigation)
-                            viewModelScope.launch(Dispatchers.IO) {
-                                try {
-                                    val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-                                    val rdbMap = hashMapOf<String, Any>(
+                                withContext(Dispatchers.Main) {
+                                    plenxoId.value = generatedPxId
+                                    revealedPlenxoId.value = generatedPxId
+                                    userCode.value = generatedCode
+                                }
+
+                                if (uid.isNotBlank()) {
+                                    // Authoritatively persist initial user profile to Firestore
+                                    val initialUserMap = mapOf(
                                         "uid" to uid,
                                         "id" to uid,
                                         "email" to targetEmail,
                                         "displayName" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                        "display_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
                                         "name" to targetName.ifBlank { targetEmail.substringBefore("@") },
-                                        "plenxo_id" to generatedPxId,
+                                        "current_name" to targetName.ifBlank { targetEmail.substringBefore("@") },
                                         "plenxoId" to generatedPxId,
-                                        "user_code" to generatedCode,
+                                        "plenxo_id" to generatedPxId,
                                         "userCode" to generatedCode,
+                                        "user_code" to generatedCode,
+                                        "px_id" to generatedPxId,
+                                        "px_code" to generatedCode,
+                                        "isEmailVerified" to true,
+                                        "emailVerified" to true,
+                                        "is_email_verified" to true,
+                                        "isProfileSetupCompleted" to false,
+                                        "isProfileSetup" to false,
+                                        "profileSetupCompleted" to false,
+                                        "is_profile_completed" to false,
+                                        "bio" to "",
+                                        "profilePicUrl" to "",
                                         "created_at" to System.currentTimeMillis(),
                                         "createdAt" to System.currentTimeMillis(),
-                                        "is_profile_completed" to false,
-                                        "is_email_verified" to true
+                                        "updatedAt" to System.currentTimeMillis()
                                     )
-                                    rdbRef.updateChildren(rdbMap)
-                                } catch (rdbEx: Exception) {
-                                    Log.w("PlenxoSignup", "Async Realtime DB sync: ${rdbEx.message}")
-                                }
-                            }
 
-                            // Hydrate session & state so user identity survives immediately
-                            SessionManager.saveLoginState(getApplication(), uid, targetEmail)
-                            SessionManager.saveUserProfileLocally(
-                                getApplication(),
-                                plenxoId = generatedPxId,
-                                displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
-                                bio = "",
-                                profilePicUrl = ""
-                            )
+                                    for (attempt in 1..3) {
+                                        try {
+                                            kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                                                firestore.collection("users").document(uid)
+                                                    .set(initialUserMap, com.google.firebase.firestore.SetOptions.merge())
+                                                    .await()
+                                            }
+                                            Log.d("PlenxoSignup", "Account document persisted to Firestore successfully on attempt $attempt")
+                                            break
+                                        } catch (dbEx: Exception) {
+                                            Log.w("PlenxoSignup", "Initial user document write attempt $attempt failed: ${dbEx.message}")
+                                            if (attempt < 3) kotlinx.coroutines.delay(200L)
+                                        }
+                                    }
+
+                                    // Realtime DB sync (asynchronous background - never blocks navigation)
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        try {
+                                            val rdbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
+                                            val rdbMap = hashMapOf<String, Any>(
+                                                "uid" to uid,
+                                                "id" to uid,
+                                                "email" to targetEmail,
+                                                "displayName" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                                "name" to targetName.ifBlank { targetEmail.substringBefore("@") },
+                                                "plenxo_id" to generatedPxId,
+                                                "plenxoId" to generatedPxId,
+                                                "user_code" to generatedCode,
+                                                "userCode" to generatedCode,
+                                                "created_at" to System.currentTimeMillis(),
+                                                "createdAt" to System.currentTimeMillis(),
+                                                "is_profile_completed" to false,
+                                                "is_email_verified" to true
+                                            )
+                                            rdbRef.updateChildren(rdbMap)
+                                        } catch (rdbEx: Exception) {
+                                            Log.w("PlenxoSignup", "Async Realtime DB sync: ${rdbEx.message}")
+                                        }
+                                    }
+
+                                    // Hydrate session & state so user identity survives immediately
+                                    SessionManager.saveLoginState(getApplication(), uid, targetEmail)
+                                    SessionManager.saveUserProfileLocally(
+                                        getApplication(),
+                                        plenxoId = generatedPxId,
+                                        displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
+                                        bio = "",
+                                        profilePicUrl = ""
+                                    )
+
+                                    withContext(Dispatchers.Main) {
+                                        currentUserProfile.value = UserProfile(
+                                            uid = uid,
+                                            id = uid,
+                                            email = targetEmail,
+                                            displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
+                                            bio = "",
+                                            statusMessage = "",
+                                            profilePicUrl = "",
+                                            plenxoId = generatedPxId,
+                                            userCode = generatedCode
+                                        )
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("PlenxoSignup", "Handled error during post-verification setup: ${e.message}", e)
+                            }
+                        }
+
+                        // Force Main Thread navigation & state transitions
+                        _isLoading.value = false
+                        _authState.value = AuthState.NEEDS_PROFILE_SETUP
+                        _currentScreen.value = PlenxoScreen.WELCOME
+                        navigateToScreen(PlenxoScreen.WELCOME, addToHistory = false, clearHistory = true)
+
+                        tempSignupEmail = ""
+                        tempSignupPassword = ""
+                        tempSignupName = ""
+                        password.value = ""
+                        confirmPassword.value = ""
+                    } else {
+                        // Login OTP challenge or existing user flow
+                        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+                        if (uid.isEmpty()) {
+                            Log.e("Plenxo", "OTP verification failed: No active Firebase Auth user session.")
+                            _errorMessage.value = "Authentication session expired or invalid. Please sign in again."
+                            _isLoading.value = false
+                            return@launch
+                        }
+
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val verificationMap = mapOf(
+                                    "isEmailVerified" to true,
+                                    "emailVerified" to true,
+                                    "is_email_verified" to true
+                                )
+                                firestore.collection("users").document(uid).set(verificationMap, com.google.firebase.firestore.SetOptions.merge()).await()
+                            } catch (e: Exception) {
+                                Log.e("Plenxo", "Failed to update email verification status: ${e.message}", e)
+                            }
+                        }
+
+                        val readResult = withContext(Dispatchers.IO) { com.example.model.fetchUserDocumentSafely(uid, firestore) }
+
+                        val userDoc = readResult.snapshot
+                        if (userDoc != null && userDoc.exists()) {
+                            val existingPxId = userDoc.getString("plenxoId")
+                                ?: userDoc.getString("plenxo_id")
+                                ?: userDoc.getString("px_id")
+                                ?: userDoc.getString("userCode")
+                                ?: ""
+                            val existingName = userDoc.getString("displayName")
+                                ?: userDoc.getString("name")
+                                ?: ""
+                            val existingBio = userDoc.getString("bio")
+                                ?: userDoc.getString("statusMessage")
+                                ?: ""
+                            val existingPic = userDoc.getString("profilePicUrl")
+                                ?: userDoc.getString("avatar_url")
+                                ?: userDoc.getString("photoUrl")
+                                ?: ""
+                            val existingAge = userDoc.get("age")?.toString()
+                                ?: userDoc.getString("dateOfBirth")
+                                ?: ""
+
+                            val formatted = if (existingPxId.isNotBlank()) {
+                                if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
+                            } else {
+                                withContext(Dispatchers.IO) { com.example.model.getOrCreatePermanentPlenxoId(uid, firestore) }
+                            }
+                            plenxoId.value = formatted
+                            revealedPlenxoId.value = formatted
+                            userCode.value = formatted.removePrefix("PX-")
+                            if (existingName.isNotBlank()) displayName.value = existingName
+                            if (existingBio.isNotBlank()) aboutText.value = existingBio
+                            if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
 
                             currentUserProfile.value = UserProfile(
                                 uid = uid,
                                 id = uid,
-                                email = targetEmail,
-                                displayName = targetName.ifBlank { targetEmail.substringBefore("@") },
-                                bio = "",
-                                statusMessage = "",
-                                profilePicUrl = "",
-                                plenxoId = generatedPxId,
-                                userCode = generatedCode
+                                email = rawEmail,
+                                displayName = existingName,
+                                bio = existingBio,
+                                statusMessage = existingBio,
+                                profilePicUrl = existingPic,
+                                plenxoId = formatted,
+                                userCode = formatted.removePrefix("PX-")
                             )
 
-                            tempSignupEmail = ""
-                            tempSignupPassword = ""
-                            tempSignupName = ""
-                            password.value = ""
-                            confirmPassword.value = ""
+                            SessionManager.saveUserProfileLocally(
+                                getApplication(),
+                                plenxoId = formatted,
+                                displayName = existingName,
+                                bio = existingBio,
+                                profilePicUrl = existingPic,
+                                age = existingAge
+                            )
 
-                            _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                            navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
                             _isLoading.value = false
-                        } else {
-                            // Login OTP challenge or existing user flow
-                            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-
-                            if (uid.isEmpty()) {
-                                Log.e("Plenxo", "OTP verification failed: No active Firebase Auth user session.")
-                                _errorMessage.value = "Authentication session expired or invalid. Please sign in again."
-                                _isLoading.value = false
-                                return@withTimeoutOrNull
-                            }
-
+                            _authState.value = AuthState.AUTHENTICATED
+                            _currentScreen.value = PlenxoScreen.HOME
+                            SessionManager.saveLoginState(getApplication(), uid, rawEmail)
+                            triggerLoginAlertEmail(rawEmail)
+                            auditSession()
+                            registerE2EEKey()
+                            startListeningForChats()
+                            com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
+                            com.example.util.AppLockManager.setLocked(getApplication(), false)
+                            observeCurrentUserProfile()
+                            navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
+                        } else if (readResult.readConfirmed && (userDoc == null || !userDoc.exists())) {
+                            _authState.value = AuthState.NEEDS_PROFILE_SETUP
+                            _currentScreen.value = PlenxoScreen.PROFILE_SETUP
                             if (uid.isNotEmpty()) {
-                                try {
-                                    val verificationMap = mapOf(
-                                        "isEmailVerified" to true,
-                                        "emailVerified" to true,
-                                        "is_email_verified" to true
-                                    )
-                                    firestore.collection("users").document(uid).set(verificationMap, com.google.firebase.firestore.SetOptions.merge()).await()
-                                } catch (e: Exception) {
-                                    Log.e("Plenxo", "Failed to update email verification status: ${e.message}", e)
-                                }
-                            }
-
-                            val readResult = com.example.model.fetchUserDocumentSafely(uid, firestore)
-
-                            val userDoc = readResult.snapshot
-                            if (userDoc != null && userDoc.exists()) {
-                                val existingPxId = userDoc.getString("plenxoId")
-                                    ?: userDoc.getString("plenxo_id")
-                                    ?: userDoc.getString("px_id")
-                                    ?: userDoc.getString("userCode")
-                                    ?: ""
-                                val existingName = userDoc.getString("displayName")
-                                    ?: userDoc.getString("name")
-                                    ?: ""
-                                val existingBio = userDoc.getString("bio")
-                                    ?: userDoc.getString("statusMessage")
-                                    ?: ""
-                                val existingPic = userDoc.getString("profilePicUrl")
-                                    ?: userDoc.getString("avatar_url")
-                                    ?: userDoc.getString("photoUrl")
-                                    ?: ""
-                                val existingAge = userDoc.get("age")?.toString()
-                                    ?: userDoc.getString("dateOfBirth")
-                                    ?: ""
-
-                                // Returning user: Save fetched data to SessionManager and immediately route to HOME
-                                val formatted = if (existingPxId.isNotBlank()) {
-                                    if (existingPxId.startsWith("PX-")) existingPxId else "PX-$existingPxId"
-                                } else {
-                                    com.example.model.getOrCreatePermanentPlenxoId(uid, firestore)
-                                }
-                                plenxoId.value = formatted
-                                revealedPlenxoId.value = formatted
-                                userCode.value = formatted.removePrefix("PX-")
-                                if (existingName.isNotBlank()) displayName.value = existingName
-                                if (existingBio.isNotBlank()) aboutText.value = existingBio
-                                if (existingPic.isNotBlank()) galleryImageUriString.value = existingPic
-
-                                currentUserProfile.value = UserProfile(
-                                    uid = uid,
-                                    id = uid,
-                                    email = rawEmail,
-                                    displayName = existingName,
-                                    bio = existingBio,
-                                    statusMessage = existingBio,
-                                    profilePicUrl = existingPic,
-                                    plenxoId = formatted,
-                                    userCode = formatted.removePrefix("PX-")
-                                )
-
-                                SessionManager.saveUserProfileLocally(
-                                    getApplication(),
-                                    plenxoId = formatted,
-                                    displayName = existingName,
-                                    bio = existingBio,
-                                    profilePicUrl = existingPic,
-                                    age = existingAge
-                                )
-
-                                _authState.value = AuthState.AUTHENTICATED
-                                SessionManager.saveLoginState(getApplication(), uid, rawEmail)
-                                triggerLoginAlertEmail(rawEmail)
-                                auditSession()
-                                registerE2EEKey()
-                                startListeningForChats()
-                                com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
-                                com.example.util.AppLockManager.setLocked(getApplication(), false)
-                                observeCurrentUserProfile()
-                                _currentScreen.value = PlenxoScreen.HOME
-                            } else if (readResult.readConfirmed && (userDoc == null || !userDoc.exists())) {
-                                // Genuine New User: Generate permanent Plenxo ID and route to Profile Setup ONLY if document confirmed not existing
-                                _authState.value = AuthState.NEEDS_PROFILE_SETUP
-                                if (uid.isNotEmpty()) {
+                                withContext(Dispatchers.IO) {
                                     try {
                                         val generatedPxId = com.example.model.resolveOrCreatePlenxoId(uid, firestore)
                                         val generatedCode = generatedPxId.removePrefix("PX-")
@@ -3327,58 +3342,64 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                                         )
                                         firestore.collection("users").document(uid).set(initialUser, com.google.firebase.firestore.SetOptions.merge()).await()
                                         
-                                        plenxoId.value = generatedPxId
-                                        revealedPlenxoId.value = generatedPxId
-                                        userCode.value = generatedCode
+                                        withContext(Dispatchers.Main) {
+                                            plenxoId.value = generatedPxId
+                                            revealedPlenxoId.value = generatedPxId
+                                            userCode.value = generatedCode
+                                        }
                                     } catch (e: Exception) {
                                         Log.e("Plenxo", "Failed in OTP verification new user profile logic: ${e.message}", e)
                                     }
                                 }
-                                navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
-                            } else {
-                                // Fallback on slow connection: load local cache and navigate to HOME
-                                val localProf = SessionManager.getUserProfileLocally(getApplication())
-                                if (localProf.plenxoId.isNotBlank()) {
-                                    plenxoId.value = localProf.plenxoId
-                                    revealedPlenxoId.value = localProf.plenxoId
-                                    userCode.value = localProf.plenxoId.removePrefix("PX-")
-                                }
-                                if (localProf.displayName.isNotBlank()) {
-                                    displayName.value = localProf.displayName
-                                } else {
-                                    displayName.value = rawEmail.substringBefore("@")
-                                }
-                                if (localProf.bio.isNotBlank()) aboutText.value = localProf.bio
-                                if (localProf.profilePicUrl.isNotBlank()) galleryImageUriString.value = localProf.profilePicUrl
-
-                                _authState.value = AuthState.AUTHENTICATED
-                                SessionManager.saveLoginState(getApplication(), uid, rawEmail)
-                                triggerLoginAlertEmail(rawEmail)
-                                auditSession()
-                                registerE2EEKey()
-                                startListeningForChats()
-                                com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
-                                com.example.util.AppLockManager.setLocked(getApplication(), false)
-                                observeCurrentUserProfile()
-                                _currentScreen.value = PlenxoScreen.HOME
                             }
+                            _isLoading.value = false
+                            _authState.value = AuthState.NEEDS_PROFILE_SETUP
+                            _currentScreen.value = PlenxoScreen.WELCOME
+                            navigateToScreen(PlenxoScreen.WELCOME, addToHistory = false, clearHistory = true)
+                        } else {
+                            val localProf = SessionManager.getUserProfileLocally(getApplication())
+                            if (localProf.plenxoId.isNotBlank()) {
+                                plenxoId.value = localProf.plenxoId
+                                revealedPlenxoId.value = localProf.plenxoId
+                                userCode.value = localProf.plenxoId.removePrefix("PX-")
+                            }
+                            if (localProf.displayName.isNotBlank()) {
+                                displayName.value = localProf.displayName
+                            } else {
+                                displayName.value = rawEmail.substringBefore("@")
+                            }
+                            if (localProf.bio.isNotBlank()) aboutText.value = localProf.bio
+                            if (localProf.profilePicUrl.isNotBlank()) galleryImageUriString.value = localProf.profilePicUrl
+
+                            _isLoading.value = false
+                            _authState.value = AuthState.AUTHENTICATED
+                            _currentScreen.value = PlenxoScreen.HOME
+                            SessionManager.saveLoginState(getApplication(), uid, rawEmail)
+                            triggerLoginAlertEmail(rawEmail)
+                            auditSession()
+                            registerE2EEKey()
+                            startListeningForChats()
+                            com.example.util.SessionManager.saveCaptchaVerified(getApplication(), false)
+                            com.example.util.AppLockManager.setLocked(getApplication(), false)
+                            observeCurrentUserProfile()
+                            navigateToScreen(PlenxoScreen.HOME, addToHistory = false, clearHistory = true)
+                        }
+                    }
+                } else {
+                    failedOtpAttempts++
+                    _errorMessage.value = null
+                    
+                    if (failedOtpAttempts >= 3) {
+                        _isOtpButtonFrozen.value = true
+                        _errorMessage.value = "Security Block: Too many failed OTP attempts. Verification is frozen for 60 seconds."
+                        viewModelScope.launch {
+                            delay(60_000)
+                            _isOtpButtonFrozen.value = false
+                            failedOtpAttempts = 0
                         }
                     } else {
-                        failedOtpAttempts++
-                        _errorMessage.value = null
-                        
-                        if (failedOtpAttempts >= 3) {
-                            _isOtpButtonFrozen.value = true
-                            _errorMessage.value = "Security Block: Too many failed OTP attempts. Verification is frozen for 60 seconds."
-                            viewModelScope.launch {
-                                delay(60_000)
-                                _isOtpButtonFrozen.value = false
-                                failedOtpAttempts = 0
-                            }
-                        } else {
-                            val remaining = 3 - failedOtpAttempts
-                            _errorMessage.value = "Invalid OTP code. Please try again ($remaining attempts remaining)."
-                        }
+                        val remaining = 3 - failedOtpAttempts
+                        _errorMessage.value = "Invalid OTP code. Please try again ($remaining attempts remaining)."
                     }
                 }
             } catch (e: Exception) {
@@ -3386,6 +3407,7 @@ class PlenxoViewModel(application: Application) : AndroidViewModel(application) 
                 _errorMessage.value = "An unexpected error occurred during OTP verification: ${e.localizedMessage}"
             } finally {
                 _isLoading.value = false
+                isVerifyingOtpInProgress = false
             }
         }
     }

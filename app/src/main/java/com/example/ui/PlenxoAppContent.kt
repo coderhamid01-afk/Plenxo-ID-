@@ -737,11 +737,13 @@ fun WelcomeScreen(viewModel: PlenxoViewModel, primaryColor: Color) {
         Spacer(modifier = Modifier.height(48.dp))
 
         Button(
-            onClick = { viewModel.navigateToAvatarSetup() },
+            onClick = {
+                viewModel.navigateToScreen(PlenxoScreen.PROFILE_SETUP, addToHistory = false, clearHistory = true)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(58.dp)
-                .testTag("setup_profile_button"),
+                .testTag("welcome_next_button"),
             shape = RoundedCornerShape(29.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = primaryColor,
@@ -749,7 +751,8 @@ fun WelcomeScreen(viewModel: PlenxoViewModel, primaryColor: Color) {
             ),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
         ) {
-            Text(stringResource(id = R.string.str_set_up_my_profile),
+            Text(
+                text = "Next",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold
             )
